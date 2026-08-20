@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>주민회의 2026(ZUCONF 2026) 통합 관리 대시보드</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; }
+        .tab-active { border-bottom: 3px solid #4f46e5; color: #4f46e5; font-weight: 700; background-color: #f5f3ff; }
+        
+        /* 편집 모드일 때만 hover/focus 효과 활성화 */
+        body.edit-mode [contenteditable="true"]:hover { outline: 2px dashed #a5b4fc; background-color: #f8fafc; cursor: text; }
+        body.edit-mode [contenteditable="true"]:focus { outline: 2px solid #6366f1; background-color: #ffffff; border-radius: 4px; }
+        
+        /* 읽기 전용 모드일 때 편집 UI 요소 숨김 및 읽기 전용 커서 */
+        body:not(.edit-mode) .admin-only { display: none !important; }
+        body:not(.edit-mode) [contenteditable] { cursor: default !important; user-select: text; }
+        
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+
+        /* 드래그 앤 드롭 스타일 */
+        tr.dragging {
+            opacity: 0.4;
+            background-color: #e0e7ff !important;
+        }
+        tr.drag-over-top {
+            border-top: 3px solid #4f46e5 !important;
+        }
+        tr.drag-over-bottom {
+            border-bottom: 3px solid #4f46e5 !important;
+        }
+        .drag-handle {
+            cursor: grab;
+        }
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <header class="bg-slate-900 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="bg-indigo-600 text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider text-white">ZUCONF 2026</span>
+                            <span class="text-xs text-slate-400">주최: (주)줌인테크 | 협찬: 오토데스크</span>
+                        </div>
+                        <h1 class="text-xl sm:text-2xl font-bold tracking-tight mt-1 flex items-center gap-2">
+                            주민회의 2026 통합 관리 대시보드
+                        </h1>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <button id="btn-auth-toggle" onclick="handleAuthButtonClick()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition">
+                        <i id="auth-icon" data-lucide="lock" class="w-4 h-4 text-amber-400"></i>
+                        <span id="auth-btn-text">관리자 모드</span>
+                    </button>
+
+                    <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition shadow-sm">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                        <span>엑셀로 저장 (.xlsx)</span>
+                    </button>
+
+                    <button onclick="openJsonModal()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition">
+                        <i data-lucide="code-2" class="w-4 h-4"></i>
+                        <span>JSON</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full">
+
+        <div class="flex flex-col sm:flex-row items-stretch gap-4 mb-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm flex flex-col justify-center items-center min-w-[130px] shrink-0">
+                <span class="text-xs text-slate-400 font-semibold block mb-0.5">행사 D-Day</span>
+                <span id="dday-tag" class="text-2xl font-black text-amber-400 tabular-nums">D-64</span>
+            </div>
+
+            <div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3 flex-grow">
+                <div class="flex items-center gap-2 text-xs">
+                    <span id="mode-status-badge" class="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-200">
+                        <i data-lucide="eye" class="w-3.5 h-3.5 text-slate-500"></i> 읽기 전용 보기 모드
+                    </span>
+                    <span class="text-slate-500 hidden sm:inline" id="mode-guide-text">수정 및 항목 추가는 상단 '관리자 모드' 로그인이 필요합니다.</span>
+                </div>
+                <div class="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                    <div class="relative w-full sm:w-60">
+                        <input type="text" id="global-search" oninput="filterDashboard()" placeholder="검색어 입력..." class="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5"></i>
+                    </div>
+                    <button onclick="resetData()" class="admin-only text-xs text-slate-500 hover:text-slate-800 border border-slate-300 px-2.5 py-1.5 rounded-lg whitespace-nowrap">
+                        초기화
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="border-b border-slate-200 mb-6 bg-white rounded-xl shadow-sm overflow-x-auto">
+            <nav class="flex justify-center space-x-1 p-2" aria-label="Tabs">
+                <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active px-4 py-2.5 text-sm font-medium rounded-lg flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i> 행사 개요
+                </button>
+                <button onclick="switchTab('agenda')" id="tab-agenda" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="calendar" class="w-4 h-4"></i> 아젠다
+                </button>
+                <button onclick="switchTab('prep')" id="tab-prep" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="check-square" class="w-4 h-4"></i> 사전 준비
+                </button>
+                <button onclick="switchTab('onsite')" id="tab-onsite" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="users" class="w-4 h-4"></i> 당일 담당 및 준비
+                </button>
+                <button onclick="switchTab('post')" id="tab-post" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="file-check" class="w-4 h-4"></i> 행사 후 진행
+                </button>
+                <button onclick="switchTab('budget')" id="tab-budget" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="pie-chart" class="w-4 h-4"></i> 예산 및 집행
+                </button>
+            </nav>
+        </div>
+
+        <section id="content-overview" class="tab-content space-y-6">
+            <div class="bg-white border border-indigo-100 rounded-2xl p-6 shadow-sm">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="target" class="w-5 h-5 text-indigo-600"></i> 행사 취지와 목적
+                    </h2>
+                    <span id="overview-badge" class="text-xs text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full font-medium">읽기 전용</span>
+                </div>
+                <textarea id="overview-mission" readonly oninput="saveOverviewText()" class="w-full text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm leading-relaxed focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y min-h-[100px]">“주민회의"는 줌인테크가 주최하고 오토데스크가 함께하는 고객 중심의 컨퍼런스입니다. 기계 제조 분야에서 건축, 건설 분야까지 설계 자동화 · 디지털 전환, 그리고 실제 고객 사례를 바탕으로 고객과 파트너가 함께 연결되어 새로운 기회와 혁신을 탐험합니다.</textarea>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                        <i data-lucide="info" class="w-4 h-4 text-slate-400"></i> 행사 기본정보
+                    </h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between py-1 border-b border-slate-100">
+                            <span class="text-slate-500">행사명</span>
+                            <span class="font-semibold text-slate-900 text-right">주민회의 2026 (ZUCONF. 2026)</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-100">
+                            <span class="text-slate-500">행사 일시</span>
+                            <span class="font-semibold text-indigo-600 text-right tabular-nums">2026-10-22(목) 13:00~17:30</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-100">
+                            <span class="text-slate-500">주최 / 주관</span>
+                            <span class="font-semibold text-slate-900 text-right">(주)줌인테크 / 오토데스크</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-100">
+                            <span class="text-slate-500">예상 참석 인원</span>
+                            <span class="font-semibold text-slate-900 text-right tabular-nums">120명 ~ 150명</span>
+                        </div>
+                        <div class="flex justify-between py-1">
+                            <span class="text-slate-500">주 청중</span>
+                            <span class="font-semibold text-slate-900 text-right">기계/제조, 건축/건설 엔지니어</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-slate-400"></i> 장소 및 인프라 스펙
+                    </h3>
+                    <div class="space-y-2 text-sm">
+                        <div>
+                            <span class="text-xs text-slate-400 block">장소</span>
+                            <span class="font-bold text-slate-900">L7 광명 바이 롯데호텔 (별관 4F 그랜드볼룸)</span>
+                        </div>
+                        <div>
+                            <span class="text-xs text-slate-400 block">주소</span>
+                            <span class="text-xs text-slate-600">경기도 광명시 신기로 22 (KTX 광명역 도보 5분)</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 pt-1 text-xs">
+                            <div class="bg-slate-50 p-2 rounded-lg">
+                                <span class="text-slate-400 block">면적 / 층고</span>
+                                <span class="font-semibold text-slate-800 tabular-nums">500㎡ / 층고 8m</span>
+                            </div>
+                            <div class="bg-slate-50 p-2 rounded-lg">
+                                <span class="text-slate-400 block">디스플레이</span>
+                                <span class="font-semibold text-slate-800 tabular-nums">메인 4K 450인치 LED</span>
+                            </div>
+                        </div>
+                        <div class="text-xs text-slate-500 pt-1">
+                            <span class="font-semibold text-slate-700">제공 옵션:</span> 주차 무제한 지원, Wi-Fi, 포디움, 유/무선 마이크
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                        <i data-lucide="phone-call" class="w-4 h-4 text-slate-400"></i> 현장 비상 연락망
+                    </h3>
+                    <div class="space-y-2.5 text-sm">
+                        <div class="bg-indigo-50/80 p-3 rounded-xl border border-indigo-100">
+                            <span class="text-xs text-indigo-600 font-bold block mb-0.5">호텔 연회 담당자</span>
+                            <div class="flex justify-between items-center">
+                                <span class="font-bold text-slate-900">가동엽 매니저</span>
+                                <a href="tel:010-8360-4441" class="text-xs font-bold text-indigo-600 hover:underline tabular-nums">010-8360-4441</a>
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <span class="text-xs text-slate-500 font-bold block mb-0.5">스케치 영상 촬영 (웅필름)</span>
+                            <div class="flex justify-between items-center">
+                                <span class="font-bold text-slate-800">장태원 감독</span>
+                                <a href="tel:010-7733-8362" class="text-xs font-bold text-indigo-600 hover:underline tabular-nums">010-7733-8362</a>
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <span class="text-xs text-slate-500 font-bold block mb-0.5">호오컨설팅 (강연 에이전시)</span>
+                            <div class="flex justify-between items-center">
+                                <span class="font-bold text-slate-800">박소민 매니저</span>
+                                <a href="tel:070-8855-4811" class="text-xs font-bold text-indigo-600 hover:underline tabular-nums">070-8855-4811</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="map" class="w-5 h-5 text-indigo-600"></i> 행사장 위치 및 오시는 길
+                    </h2>
+                    <span class="text-xs text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full font-bold">L7 광명 바이 롯데호텔 별관 4F 그랜드볼룸</span>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                    <div class="lg:col-span-6 bg-slate-900 text-white rounded-2xl p-5 border border-slate-800 flex flex-col justify-between min-h-[220px]">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-400 block">VENUE MAP</span>
+                                <h3 class="text-lg font-bold text-white mt-0.5">L7 광명 바이 롯데호텔 (구 테이크호텔)</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">경기도 광명시 신기로 22 (일직동 512-3)</p>
+                            </div>
+                            <span class="bg-indigo-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg shadow-xs shrink-0">무료 주차 지원</span>
+                        </div>
+
+                        <div class="bg-slate-800/90 border border-slate-700/80 rounded-xl p-4 my-1">
+                            <div class="grid grid-cols-3 gap-2 text-center text-xs">
+                                <div class="bg-slate-700/80 border border-slate-600 p-2.5 rounded-lg flex flex-col items-center justify-center">
+                                    <i data-lucide="train" class="w-4 h-4 text-amber-400 mb-1"></i>
+                                    <span class="font-bold text-amber-300">KTX 광명역</span>
+                                    <span class="text-[10px] text-slate-400 mt-0.5">1번 출구</span>
+                                </div>
+                                <div class="flex flex-col items-center justify-center text-indigo-400 font-bold text-[11px]">
+                                    <span>◄── 도보 5분 ──►</span>
+                                    <span class="text-[10px] text-slate-400 font-normal">약 350m 직진</span>
+                                </div>
+                                <div class="bg-indigo-600/90 border border-indigo-400 p-2.5 rounded-lg flex flex-col items-center justify-center shadow-md">
+                                    <i data-lucide="building" class="w-4 h-4 text-white mb-1"></i>
+                                    <span class="font-extrabold text-white">L7 광명 호텔</span>
+                                    <span class="text-[10px] text-indigo-200 mt-0.5">별관 4F 그랜드볼룸</span>
+                                </div>
+                            </div>
+                            <div class="mt-3 pt-2.5 border-t border-slate-700/60 flex flex-wrap justify-around text-[11px] text-slate-300 gap-1">
+                                <span class="flex items-center gap-1"><i data-lucide="shopping-bag" class="w-3.5 h-3.5 text-indigo-400"></i> 이케아 광명점 (도보 3분)</span>
+                                <span class="flex items-center gap-1"><i data-lucide="store" class="w-3.5 h-3.5 text-indigo-400"></i> 롯데몰 (맞은편)</span>
+                                <span class="flex items-center gap-1"><i data-lucide="hospital" class="w-3.5 h-3.5 text-indigo-400"></i> 중앙대 광명병원 (도보 7분)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-6 flex flex-col justify-between gap-3">
+                        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 flex items-center gap-4 flex-1">
+                            <div class="p-2.5 bg-indigo-100 text-indigo-700 rounded-lg shrink-0">
+                                <i data-lucide="train-track" class="w-5 h-5"></i>
+                            </div>
+                            <div class="space-y-0.5">
+                                <div class="text-xs font-bold text-slate-900">지하철 / KTX</div>
+                                <p class="text-xs text-slate-600">
+                                    <strong class="text-slate-800">KTX / 1호선 광명역</strong> 1번 출구로 나와 도보 약 5분 (약 350m 직진)
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 flex items-center gap-4 flex-1">
+                            <div class="p-2.5 bg-indigo-100 text-indigo-700 rounded-lg shrink-0">
+                                <i data-lucide="bus" class="w-5 h-5"></i>
+                            </div>
+                            <div class="space-y-0.5">
+                                <div class="text-xs font-bold text-slate-900">버스 이용 안내</div>
+                                <p class="text-xs text-slate-600">
+                                    <strong class="text-slate-800">광명역/이케아 정류장</strong> 사당역 직행 8507번, 17, 22, 3000, 3001번
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 flex items-center gap-4 flex-1">
+                            <div class="p-2.5 bg-indigo-100 text-indigo-700 rounded-lg shrink-0">
+                                <i data-lucide="car" class="w-5 h-5"></i>
+                            </div>
+                            <div class="space-y-0.5">
+                                <div class="text-xs font-bold text-slate-900">자차 / 주차</div>
+                                <p class="text-xs text-slate-600">
+                                    <strong class="text-slate-800">지하 주차장 이용</strong> 행사 참석자 <span class="text-indigo-600 font-bold">무제한 무료 주차</span> 등록 지원
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="content-agenda" class="tab-content hidden space-y-4">
+            <div class="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">타임테이블 및 세션 관리</h2>
+                    <p class="text-xs text-slate-500">시작 시간(13:00) 기준 소요 분을 입력하면 시간이 자동 계산되며, 관리자 모드에서 행을 마우스로 끌어 순서를 바꿀 수 있습니다.</p>
+                </div>
+                <button onclick="addRow('agenda')" class="admin-only bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1">
+                    <i data-lucide="plus" class="w-4 h-4"></i> 세션 추가
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-700 text-sm border-b border-slate-200">
+                            <th class="admin-only p-3.5 w-10 text-center text-sm font-semibold">이동</th>
+                            <th class="p-3.5 w-36 text-sm font-semibold">시간</th>
+                            <th class="p-3.5 w-20 text-center text-sm font-semibold">분</th>
+                            <th class="p-3.5 w-48 text-sm font-semibold">주제 및 세션</th>
+                            <th class="p-3.5 text-sm font-semibold">세션 별 주요 내용</th>
+                            <th class="p-3.5 w-32 text-sm font-semibold">발표자</th>
+                            <th class="p-3.5 w-28 text-center text-sm font-semibold">완료 여부</th>
+                            <th class="admin-only p-3.5 w-16 text-center text-sm font-semibold">삭제</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agenda-table-body" class="divide-y divide-slate-200 text-sm">
+                        </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="content-prep" class="tab-content hidden space-y-6">
+            <div class="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">사전 준비 체크리스트 및 마일스톤</h2>
+                    <p class="text-xs text-slate-500">세션 준비, 모객 준비, 사전 홍보, 진행 준비 등 세부 단계별 보드에서 각각 항목을 추가하고 관리할 수 있습니다.</p>
+                </div>
+            </div>
+
+            <div id="prep-boards-container" class="space-y-6">
+                </div>
+        </section>
+
+        <section id="content-onsite" class="tab-content hidden space-y-4">
+            <div class="bg-indigo-900 text-white p-4 rounded-xl shadow-sm flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-indigo-800 rounded-lg">
+                        <i data-lucide="user-check" class="w-6 h-6 text-amber-300"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-sm sm:text-base">행사 당일 R&R 및 현장 준비사항</h2>
+                        <p class="text-xs text-indigo-200">호텔 담당자: 가동엽 매니저 (010-8360-4441) | 복장: 단체 티셔츠 + 흰색 면티 + 청바지 + 운동화</p>
+                    </div>
+                </div>
+                <button onclick="addRow('onsite')" class="admin-only bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1">
+                    <i data-lucide="plus" class="w-4 h-4"></i> 역할 추가
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-700 text-sm border-b border-slate-200">
+                            <th class="p-3.5 w-14 text-center text-sm font-semibold">No.</th>
+                            <th class="p-3.5 w-40 text-sm font-semibold">분류항목</th>
+                            <th class="p-3.5 w-28 text-sm font-semibold">담당자</th>
+                            <th class="p-3.5 w-48 text-sm font-semibold">준비 및 확인 항목</th>
+                            <th class="p-3.5 text-sm font-semibold">세부 내용 및 지침</th>
+                            <th class="p-3.5 w-28 text-center text-sm font-semibold">완료 여부</th>
+                            <th class="admin-only p-3.5 w-16 text-center text-sm font-semibold">삭제</th>
+                        </tr>
+                    </thead>
+                    <tbody id="onsite-table-body" class="divide-y divide-slate-200 text-sm">
+                        </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="content-post" class="tab-content hidden space-y-4">
+            <div class="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">행사 후 사후 관리 및 성과 리포팅</h2>
+                    <p class="text-xs text-slate-500">Thanks Letter, 스케치 영상 제작, 참석자 통계 및 마케팅 성과 리포트 관리</p>
+                </div>
+                <button onclick="addRow('post')" class="admin-only bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1">
+                    <i data-lucide="plus" class="w-4 h-4"></i> 항목 추가
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-700 text-sm border-b border-slate-200">
+                            <th class="p-3.5 w-28 text-sm font-semibold">세부단계</th>
+                            <th class="p-3.5 w-40 text-sm font-semibold">진행항목</th>
+                            <th class="p-3.5 text-sm font-semibold">체크사항 / 상세 과업</th>
+                            <th class="p-3.5 w-36 text-sm font-semibold">담당 / 내용</th>
+                            <th class="p-3.5 w-28 text-center text-sm font-semibold">완료 여부</th>
+                            <th class="admin-only p-3.5 w-16 text-center text-sm font-semibold">삭제</th>
+                        </tr>
+                    </thead>
+                    <tbody id="post-table-body" class="divide-y divide-slate-200 text-sm">
+                        </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="content-budget" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-center items-center text-center space-y-2">
+                    <span class="text-xs font-semibold text-slate-500 block">총 공급가액 (VAT 별도)</span>
+                    <div id="budget-supply-total" class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">0원</div>
+                    <span class="text-xs text-slate-400 block">예산 항목 합계 순수 공급가</span>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-center items-center text-center space-y-2">
+                    <span class="text-xs font-semibold text-slate-500 block">부가세 합계 (VAT 10%)</span>
+                    <div id="budget-vat-total" class="text-2xl sm:text-3xl font-extrabold text-amber-500 tracking-tight tabular-nums">0원</div>
+                    <span class="text-xs text-slate-400 block">부가세 세액 추정치</span>
+                </div>
+
+                <div class="bg-indigo-50/60 p-6 rounded-2xl border border-indigo-200/80 shadow-sm flex flex-col justify-center items-center text-center space-y-2">
+                    <span class="text-xs font-bold text-indigo-700 block">총 소요 예산 (VAT 포함)</span>
+                    <div id="budget-grand-total" class="text-2xl sm:text-3xl font-black text-indigo-600 tracking-tight tabular-nums">0원</div>
+                    <span class="text-xs text-indigo-500/80 block">실제 최종 집행 예상 금액</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+                <div class="p-4 border-b border-slate-200 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-900 text-sm">항목별 세부 견적 및 집행 내역</h3>
+                    <button onclick="addRow('budget')" class="admin-only bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1">
+                        <i data-lucide="plus" class="w-4 h-4"></i> 예산 항목 추가
+                    </button>
+                </div>
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-700 text-xs border-b border-slate-200">
+                            <th class="p-3.5 w-40 text-xs font-semibold">세부항목</th>
+                            <th class="p-3.5 w-36 text-xs font-semibold">대상/업체</th>
+                            <th class="p-3.5 w-28 text-center text-xs font-semibold">단가(원)</th>
+                            <th class="p-3.5 w-20 text-center text-xs font-semibold">수량</th>
+                            <th class="p-3.5 w-32 text-right text-xs font-semibold">공급가액(원)</th>
+                            <th class="p-3.5 w-32 text-center text-xs font-semibold">증빙 자료</th>
+                            <th class="p-3.5 text-xs font-semibold">비고/세부내용</th>
+                            <th class="admin-only p-3.5 w-16 text-center text-xs font-semibold">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody id="budget-table-body" class="divide-y divide-slate-200 text-xs">
+                        </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="password-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="lock" class="w-5 h-5 text-indigo-600"></i> 관리자 비밀번호 인증
+                </h3>
+                <button onclick="closePasswordModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-500">
+                수정 및 항목 추가/삭제를 진행하려면 관리자 비밀번호를 입력해 주세요. (기본 암호: 2026)
+            </p>
+            <div>
+                <input type="password" id="admin-password-input" placeholder="비밀번호 입력" oninput="document.getElementById('password-error').classList.add('hidden')" onkeydown="if(event.key==='Enter') submitPassword()" class="w-full text-center tracking-widest text-sm p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <p id="password-error" class="text-rose-600 text-[11px] mt-1.5 hidden font-medium text-center">비밀번호가 일치하지 않습니다.</p>
+            </div>
+            <div class="flex gap-2 pt-2">
+                <button onclick="submitPassword()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2.5 rounded-xl transition">
+                    인증 및 편집 시작
+                </button>
+                <button onclick="closePasswordModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl">
+                    취소
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="json-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="code" class="w-5 h-5 text-indigo-600"></i> 대시보드 JSON Data 관리
+                </h3>
+                <button onclick="closeJsonModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-500">
+                대시보드의 현재 모든 수기 수정 데이터 및 진행 상태가 포함된 JSON입니다. 복사하여 백업하거나, 수정된 JSON을 붙여넣어 업데이트할 수 있습니다.
+            </p>
+            <textarea id="json-data-area" class="w-full h-64 font-mono text-xs p-3 bg-slate-900 text-emerald-400 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
+            <div class="flex justify-between items-center pt-2">
+                <button onclick="copyJsonText()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5">
+                    <i data-lucide="copy" class="w-4 h-4"></i> 클립보드에 복사
+                </button>
+                <div class="flex gap-2">
+                    <button onclick="applyJsonText()" class="admin-only bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg">
+                        데이터 적용하기
+                    </button>
+                    <button onclick="closeJsonModal()" class="bg-slate-200 text-slate-700 text-xs font-semibold px-4 py-2 rounded-lg">
+                        닫기
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-xs flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toast-message">수정사항이 반영되었습니다.</span>
+    </div>
+
+    <script>
+        // 기본 관리자 비밀번호
+        const DEFAULT_PW_PLAIN = "2026";
+        const ADMIN_PW_HASH = "b328a2a8db42cb8fae2390f7a0ea26df3228a6f3b06329c298064d8a57ebf76f";
+        let isEditMode = sessionStorage.getItem('zuconf_admin_auth') === 'true';
+
+        // 대시보드 기본 마스터 데이터 (아젠다에 소요 분 `duration` 필드 추가)
+        const initialData = {
+            overviewMission: "“주민회의\"는 줌인테크가 주최하고 오토데스크가 함께하는 고객 중심의 컨퍼런스입니다. 기계 제조 분야에서 건축, 건설 분야까지 설계 자동화 · 디지털 전환, 그리고 실제 고객 사례를 바탕으로 고객과 파트너가 함께 연결되어 새로운 기회와 혁신을 탐험합니다.",
+            agenda: [
+                { duration: 30, time: "13:00 ~ 13:30", topic: "오프닝 & 회사 소개", content: "행사 개요 및 참석자 감사 인사, 회사 소개 및 자동화/개발 프로젝트 소개", speaker: "줌인테크", status: "완료" },
+                { duration: 40, time: "13:30 ~ 14:10", topic: "D&M, A&E 세션", content: "제조 분야 AI 핵심 기술 동향 및 비전 / 건축·건설 분야 AI 적용 트렌드", speaker: "오토데스크", status: "진행중" },
+                { duration: 20, time: "14:10 ~ 14:30", topic: "Break & Networking", content: "네트워킹 및 휴식", speaker: "-", status: "진행중" },
+                { duration: 20, time: "14:30 ~ 14:50", topic: "AI기반 자동화 설계-고객 성공 사례 발표(1)", content: "에이치앤이루자 AI 설계 자동화 사례", speaker: "에이치앤이루자", status: "진행중" },
+                { duration: 20, time: "14:50 ~ 15:10", topic: "BIM 도입 및 적용-고객 성공 사례 발표(2)", content: "YP디자인그룹 BIM 도입 과정 및 적용 사례", speaker: "YP디자인그룹", status: "진행중" },
+                { duration: 20, time: "15:10 ~ 15:30", topic: "Break & Networking", content: "네트워킹 및 휴식", speaker: "-", status: "진행중" },
+                { duration: 60, time: "15:30 ~ 16:30", topic: "AI 시대의 성과를 만드는 리더십", content: "AI 전문가 특별 세션 (조용민 대표 초청 강연)", speaker: "조용민 대표", status: "완료" },
+                { duration: 20, time: "16:30 ~ 16:50", topic: "A&E 관련 세션", content: "건축/건설 솔루션 세션 (최은석 컨설턴트)", speaker: "줌인테크", status: "대기" },
+                { duration: 20, time: "16:50 ~ 17:10", topic: "Works AI", content: "산업별 AI 업무 환경 구축 방안 및 사례", speaker: "Works AI", status: "진행중" },
+                { duration: 20, time: "17:10 ~ 17:30", topic: "맺음말", content: "향후 계획 안내 및 세미나 종료", speaker: "줌인테크", status: "대기" }
+            ],
+            prep: [
+                { stage: "세션 준비", item: "Agenda 검토 및 확정", check: "① 메인 테마 및 메시지\n② 발표 주제 선정 및 조율", deadline: "2026-08-28(금)", owner: "Sales", status: "진행중" },
+                { stage: "세션 준비", item: "발표자 섭외", check: "① 오토데스크 세션 키노트\n② 고객 발표자(D&M, A&E 각 1명) 섭외 확정", deadline: "2026-08-28(금)", owner: "Sales", status: "진행중" },
+                { stage: "모객 준비", item: "기존 고객 리스트 업", check: "각 산업별 전체 고객 및 타겟 리스트업 작성", deadline: "2026-08-31(월)", owner: "Sales", status: "진행중" },
+                { stage: "모객 준비", item: "각 협단체 리스트업", check: "각 산업별 관련 협단체 및 기관 전체 대상자 리스트업", deadline: "2026-09-04(금)", owner: "Sales", status: "대기" },
+                { stage: "모객 준비", item: "대상자 Call Touch", check: "① 대상자별 담당 지정\n② 9/7(월) 시작 매일 체크 및 콜 터치 완료", deadline: "2026-09-07(월)", owner: "Sales", status: "대기" },
+                { stage: "사전 홍보", item: "사전등록 페이지", check: "줌인테크 홈페이지 내 공식 행사 사전등록 랜딩 페이지 구축", deadline: "2026-09-14(월)", owner: "MKT", status: "대기" },
+                { stage: "사전 홍보", item: "eDM 디자인", check: "사전등록 페이지 연동 템플릿, 웹 디자인, HTML 코딩 및 QR코드 적용", deadline: "2026-09-14(월)", owner: "MKT", status: "대기" },
+                { stage: "사전 홍보", item: "eDM 발송 (총 8회)", check: "1차 9/21(월), 2차 9/29(화), 3차 10/2(금), 4차 10/7(수), 5차 10/12(월), 6차 10/14(수), 7차 10/19(월), 8차 10/21(수)\n(※ 두비즈 플랫폼 별도 3회 발송 포함)", deadline: "2026-09-21(월)", owner: "MKT", status: "대기" },
+                { stage: "사전 홍보", item: "행사 안내지", check: "행사 홍보, 베뉴 약도 및 세부 아젠다 리플렛/안내지 인쇄", deadline: "2026-10-14(수)", owner: "MKT", status: "대기" },
+                { stage: "사전 홍보", item: "LED 스크린 이미지", check: "메인 로비 및 별관 4F 그랜드볼룸 무대 중앙 메인 LED 4K 규격 제작", deadline: "2026-10-08(목)", owner: "MKT", status: "대기" },
+                { stage: "사전 홍보", item: "인트로 및 쇼릴 영상", check: "행사 정시 시작 알림 인트로 및 세션 간 아젠다 루핑 영상 제작", deadline: "2026-10-16(금)", owner: "MKT", status: "대기" },
+                { stage: "진행 준비", item: "진행 스크립트 준비", check: "MC/사회자 오프닝 인사말, 회사소개, 발표자 소개, 맺음말 스크립트 작성", deadline: "2026-10-16(금)", owner: "MKT", status: "대기" },
+                { stage: "진행 준비", item: "설문 조사", check: "참석자 설문 항목 설계, 현장 배포용 QR코드 및 설문 응답 페이지 관리", deadline: "2026-10-16(금)", owner: "Sales & MKT", status: "대기" }
+            ],
+            onsite: [
+                { no: 1, item: "행사 복장", owner: "ALL", check: "개인별 단체 티셔츠", details: "단체 티셔츠 + 흰색 면티 + 청바지 + 운동화", status: "대기" },
+                { no: 2, item: "증정품 수취 및 관리", owner: "정안근", check: "증정품 배포 및 창고 수량", details: "① 검수 후 행사장 창고 보관 ② 잔여수량 입고 및 보고", status: "대기" },
+                { no: 3, item: "등록 데스크", owner: "강서연, 이수진", check: "등록 테이블 세팅 및 접수", details: "① 명함 수취/이름표 배포 ② 참석 체크 ③ 미등록자 현장 출력", status: "대기" },
+                { no: 4, item: "메인 로비 다과 테이블", owner: "강서연, 이수진", check: "Coffee & 다과 & 핑거푸드", details: "테이블 주변 정리 및 소진 시 호텔 직원 소통 리필", status: "대기" },
+                { no: 5, item: "세미나룸 참석자 세팅", owner: "최영민 외", check: "참석자 테이블 세팅", details: "행사 안내지 및 생수 사전 비치", status: "대기" },
+                { no: 6, item: "중앙 무대 & 방송/영상", owner: "이충헌, 지명근, 홍성준", check: "LED 화면, 마이크, 노트북, 조명", details: "발표자료 테스트, 프리젠터 및 쇼릴 동영상 sound 체크, 조명 컨트롤", status: "진행중" },
+                { no: 7, item: "1층 로비 안내", owner: "최영민", check: "롤업-배너 설치", details: "배치 장소 확인 및 입구 안내 배너 설치", status: "대기" },
+                { no: 8, item: "사진 촬영", owner: "미정", check: "고해상도 행사 사진", details: "① 세션 및 회식 현장 촬영 ② 서버 업로드", status: "대기" },
+                { no: 9, item: "인터뷰 가이드", owner: "김수억", check: "고객 인터뷰 (5명)", details: "① 인터뷰 대상자 선정 및 기프트 카드 ② 웅필름 촬영 지원", status: "진행중" },
+                { no: 10, item: "배차 및 물품", owner: "미정", check: "물품 운반 및 세팅", details: "배너(2), 안내지, 생수, TV모니터, 거치대, 증정품 BOX", status: "대기" },
+                { no: 11, item: "호텔 소통", owner: "김수억", check: "현장 총괄 대응", details: "가동엽 매니저와 요구사항 즉각 협의", status: "진행중" }
+            ],
+            post: [
+                { stage: "Thanks Letter", item: "디자인 및 발송", check: "행사 주요 사진 삽입 템플릿, 스케치 영상 링크", content: "행사 후 3일 이내 발송", status: "대기" },
+                { stage: "행사 동영상", item: "영상 편집 및 제작", check: "웅필름 제작 스케치 영상 (5분) 및 숏폼 (1편)", content: "홈페이지 및 마케팅 자료 활용", status: "진행중" },
+                { stage: "통계 및 추이", item: "사전등록 및 참석 분석", check: "두비즈 플랫폼 관리 페이지 확인 : 사전등록, 참석, 설문, 질문", content: "eDM 연관성 및 참석률 산출", status: "대기" },
+                { stage: "성과 분석", item: "행사/영업 성과 리포트", check: "목표 대비 모객률/참석률, 견적/Demo/자료 요청 건수", content: "마케팅 리포트 작성 및 Autodesk SCK 제출", status: "대기" }
+            ],
+            budget: [
+                { item: "장소 대관료", target: "L7 광명 호텔", price: 3000000, qty: 1, proof: "세금계산서", note: "그랜드볼룸(별관4F), 주차/Wi-Fi/포디움 포함" },
+                { item: "커피 & 다과", target: "L7 광명 호텔", price: 13636, qty: 120, proof: "세금계산서", note: "1인 단가 (VAT 별도 기준)" },
+                { item: "핑거 푸드", target: "L7 광명 호텔", price: 10000, qty: 120, proof: "세금계산서", note: "로비 다과 케이터링" },
+                { item: "생수", target: "참석자 비치용", price: 1000, qty: 120, proof: "법인카드", note: "세미나 테이블 개별 비치" },
+                { item: "외부 초청 강연자", target: "호오컨설팅", price: 4500000, qty: 1, proof: "세금계산서", note: "조용민 대표 강연료" },
+                { item: "외부 DB-홍보 eDM 배포", target: "두비즈", price: 1200000, qty: 3, proof: "세금계산서", note: "3회 발송 시 5회 진행 지원" },
+                { item: "행사 동영상 촬영", target: "(주)웅필름", price: 2100000, qty: 1, proof: "세금계산서", note: "행사 스케치 영상(5분) & 숏폼(1편)" },
+                { item: "행사 기념품", target: "고려기프트", price: 30000, qty: 150, proof: "세금계산서", note: "참석자 증정품" },
+                { item: "롤 배너 제작", target: "오프린트미", price: 100000, qty: 2, proof: "법인카드", note: "안내 롤배너 2개" },
+                { item: "인쇄비용(행사 순서지)", target: "온페이퍼", price: 1000, qty: 130, proof: "법인카드", note: "낱장 : 행사 순서지 130장" },
+                { item: "유니폼", target: "유니클로", price: 50000, qty: 3, proof: "법인카드", note: "이충헌, 최은석, 김주은" },
+                { item: "로고 인쇄(자수)", target: "두올자수", price: 20000, qty: 3, proof: "법인카드", note: "유니폼 로고 자수" },
+                { item: "행사용 다과", target: "재열 대표", price: 50000, qty: 10, proof: "기타", note: "화과자-케이터링 테이블에 제공" },
+                { item: "명찰 세트", target: "모두", price: 2190, qty: 130, proof: "법인카드", note: "목걸이 (실크)인쇄" },
+                { item: "발표자 사례금", target: "발표자", price: 200000, qty: 2, proof: "기타", note: "외부 발표자 2명 (각 20만원)" }
+            ]
+        };
+
+        // 앱 상태 관리
+        let dbData = JSON.parse(localStorage.getItem('zuconf_2026_data')) || JSON.parse(JSON.stringify(initialData));
+
+        // 초기화 함수
+        window.addEventListener('DOMContentLoaded', () => {
+            calculateDDay();
+            recalculateAgendaTimes();
+            updateEditModeUI();
+            renderAll();
+        });
+
+        // D-Day 계산
+        function calculateDDay() {
+            const eventDate = new Date('2026-10-22T00:00:00');
+            const today = new Date('2026-08-19T00:00:00');
+            const diffTime = eventDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const ddayElem = document.getElementById('dday-tag');
+            if (ddayElem) {
+                ddayElem.innerText = diffDays >= 0 ? `D-${diffDays}` : `D+${Math.abs(diffDays)}`;
+            }
+        }
+
+        // ==========================================
+        // ⏱️ 아젠다 시간 자동 계산 (13:00 기준 누적 계산)
+        // ==========================================
+        function recalculateAgendaTimes() {
+            if (!dbData.agenda || dbData.agenda.length === 0) return;
+            
+            let currentMinutes = 13 * 60; // 13:00 = 780분
+
+            dbData.agenda.forEach(item => {
+                const duration = Number(item.duration) || 20;
+                item.duration = duration;
+
+                const startH = String(Math.floor(currentMinutes / 60)).padStart(2, '0');
+                const startM = String(currentMinutes % 60).padStart(2, '0');
+
+                const endMinutes = currentMinutes + duration;
+                const endH = String(Math.floor(endMinutes / 60)).padStart(2, '0');
+                const endM = String(endMinutes % 60).padStart(2, '0');
+
+                item.time = `${startH}:${startM} ~ ${endH}:${endM}`;
+                currentMinutes = endMinutes;
+            });
+            saveToLocalStorage();
+        }
+
+        function updateAgendaDuration(index, newDuration) {
+            if (!isEditMode) return;
+            const duration = Math.max(1, Number(String(newDuration).replace(/[^0-9]/g, '')) || 10);
+            if (dbData.agenda && dbData.agenda[index]) {
+                dbData.agenda[index].duration = duration;
+                recalculateAgendaTimes();
+                renderAgenda();
+                showToast(`소요 시간이 [${duration}분]으로 변경되어 타임테이블이 자동 재계산되었습니다.`);
+            }
+        }
+
+        // 탭 전환 Logic
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('tab-active');
+                btn.classList.add('text-slate-600');
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            const activeContent = document.getElementById(`content-${tabName}`);
+            if (activeBtn) {
+                activeBtn.classList.add('tab-active');
+                activeBtn.classList.remove('text-slate-600');
+            }
+            if (activeContent) activeContent.classList.remove('hidden');
+        }
+
+        // ==========================================
+        // 🔒 관리자 인증 및 편집 모드 제어
+        // ==========================================
+        function handleAuthButtonClick() {
+            if (isEditMode) {
+                isEditMode = false;
+                sessionStorage.removeItem('zuconf_admin_auth');
+                updateEditModeUI();
+                renderAll();
+                showToast("관리자 편집 모드가 종료되었습니다.");
+            } else {
+                document.getElementById('admin-password-input').value = "";
+                document.getElementById('password-error').classList.add('hidden');
+                document.getElementById('password-modal').classList.remove('hidden');
+                setTimeout(() => document.getElementById('admin-password-input').focus(), 100);
+            }
+        }
+
+        function closePasswordModal() {
+            document.getElementById('password-modal').classList.add('hidden');
+        }
+
+        async function submitPassword() {
+            const inputVal = document.getElementById('admin-password-input').value;
+            const trimmed = inputVal.trim();
+            let isAuthenticated = false;
+
+            if (trimmed === DEFAULT_PW_PLAIN) {
+                isAuthenticated = true;
+            } else if (window.crypto && window.crypto.subtle) {
+                try {
+                    const msgBuffer = new TextEncoder().encode(trimmed);
+                    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                    if (hashHex === ADMIN_PW_HASH) {
+                        isAuthenticated = true;
+                    }
+                } catch (e) {
+                    console.warn("Crypto fallback triggered:", e);
+                }
+            }
+
+            if (isAuthenticated) {
+                isEditMode = true;
+                sessionStorage.setItem('zuconf_admin_auth', 'true');
+                closePasswordModal();
+                updateEditModeUI();
+                renderAll();
+                showToast("관리자 인증 성공! 편집 모드가 활성화되었습니다.");
+            } else {
+                document.getElementById('password-error').classList.remove('hidden');
+            }
+        }
+
+        function updateEditModeUI() {
+            const body = document.body;
+            const btn = document.getElementById('btn-auth-toggle');
+            const authText = document.getElementById('auth-btn-text');
+            const authIcon = document.getElementById('auth-icon');
+            const modeBadge = document.getElementById('mode-status-badge');
+            const modeGuide = document.getElementById('mode-guide-text');
+            const overviewTextarea = document.getElementById('overview-mission');
+            const overviewBadge = document.getElementById('overview-badge');
+
+            if (isEditMode) {
+                body.classList.add('edit-mode');
+                btn.className = "bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition shadow-sm";
+                authText.innerText = "편집 종료";
+                if (authIcon) authIcon.setAttribute('data-lucide', 'unlock');
+                modeBadge.className = "bg-rose-100 text-rose-700 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 border border-rose-200";
+                modeBadge.innerHTML = `<i data-lucide="unlock" class="w-3.5 h-3.5 text-rose-600"></i> 편집 모드 활성화 중`;
+                modeGuide.innerText = "텍스트, 단가, 수량을 자유롭게 수정할 수 있으며 실시간 자동 저장됩니다.";
+                if (overviewTextarea) overviewTextarea.removeAttribute('readonly');
+                if (overviewBadge) {
+                    overviewBadge.innerText = "수기 수정 가능";
+                    overviewBadge.className = "text-xs text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full font-medium";
+                }
+            } else {
+                body.classList.remove('edit-mode');
+                btn.className = "bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition";
+                authText.innerText = "관리자 모드";
+                if (authIcon) authIcon.setAttribute('data-lucide', 'lock');
+                modeBadge.className = "bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-200";
+                modeBadge.innerHTML = `<i data-lucide="eye" class="w-3.5 h-3.5 text-slate-500"></i> 읽기 전용 보기 모드`;
+                modeGuide.innerText = "수정 및 항목 추가는 상단 '관리자 모드' 로그인이 필요합니다.";
+                if (overviewTextarea) overviewTextarea.setAttribute('readonly', 'true');
+                if (overviewBadge) {
+                    overviewBadge.innerText = "읽기 전용";
+                    overviewBadge.className = "text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full font-medium";
+                }
+            }
+            lucide.createIcons();
+        }
+
+        // 전체 렌더링
+        function renderAll() {
+            if (document.getElementById('overview-mission')) {
+                document.getElementById('overview-mission').value = dbData.overviewMission || initialData.overviewMission;
+            }
+            renderAgenda();
+            renderPrep();
+            renderOnsite();
+            renderPost();
+            renderBudget();
+            saveToLocalStorage();
+        }
+
+        // 로컬 스토리지 저장
+        function saveToLocalStorage() {
+            localStorage.setItem('zuconf_2026_data', JSON.stringify(dbData));
+        }
+
+        // 개요 텍스트 저장
+        function saveOverviewText() {
+            if (!isEditMode) return;
+            dbData.overviewMission = document.getElementById('overview-mission').value;
+            saveToLocalStorage();
+        }
+
+        // Badge 생성 Helper
+        function getBadgeHtml(status, type, index) {
+            const colors = {
+                '완료': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+                '진행중': 'bg-blue-100 text-blue-800 border-blue-300',
+                '대기': 'bg-amber-100 text-amber-800 border-amber-300',
+                '지연': 'bg-rose-100 text-rose-800 border-rose-300'
+            };
+            const icons = {
+                '완료': '🟢 완료',
+                '진행중': '🔵 진행중',
+                '대기': '🟡 대기',
+                '지연': '🔴 지연'
+            };
+            const current = status || '대기';
+
+            if (isEditMode) {
+                return `
+                    <select onchange="updateStatus('${type}', ${index}, this.value)" class="text-xs font-bold px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none transition ${colors[current] || colors['대기']}">
+                        <option value="완료" ${current === '완료' ? 'selected' : ''}>🟢 완료</option>
+                        <option value="진행중" ${current === '진행중' ? 'selected' : ''}>🔵 진행중</option>
+                        <option value="대기" ${current === '대기' ? 'selected' : ''}>🟡 대기</option>
+                        <option value="지연" ${current === '지연' ? 'selected' : ''}>🔴 지연</option>
+                    </select>
+                `;
+            } else {
+                return `
+                    <span class="inline-block text-xs font-bold px-2.5 py-1 rounded-full border ${colors[current] || colors['대기']}">
+                        ${icons[current] || current}
+                    </span>
+                `;
+            }
+        }
+
+        // 상태 업데이트
+        function updateStatus(type, index, value) {
+            if (!isEditMode) return;
+            if (dbData[type] && dbData[type][index]) {
+                dbData[type][index].status = value;
+                renderAll();
+                showToast(`상태가 [${value}](으)로 업데이트되었습니다.`);
+            }
+        }
+
+        // 일반 필드 수기 수정 처리
+        function updateCell(type, index, field, value) {
+            if (!isEditMode) return;
+            if (dbData[type] && dbData[type][index]) {
+                dbData[type][index][field] = value.trim();
+                saveToLocalStorage();
+                if (type === 'budget') {
+                    renderBudget();
+                }
+            }
+        }
+
+        // 증빙자료 선택 수정 처리
+        function updateProof(index, value) {
+            if (!isEditMode) return;
+            if (dbData.budget && dbData.budget[index]) {
+                dbData.budget[index].proof = value;
+                saveToLocalStorage();
+                renderBudget();
+                showToast(`증빙 자료가 [${value}](으)로 설정되었습니다.`);
+            }
+        }
+
+        // 예산 입력 박스 (단가/수량) 변경 처리
+        function updateBudgetInput(index, field, value) {
+            if (!isEditMode) return;
+            const num = Number(String(value).replace(/[^0-9]/g, '')) || 0;
+            if (dbData.budget && dbData.budget[index]) {
+                dbData.budget[index][field] = num;
+                saveToLocalStorage();
+                renderBudget();
+            }
+        }
+
+        // 항목 삭제
+        function deleteRow(type, index) {
+            if (!isEditMode) return;
+            if (confirm('해당 항목을 삭제하시겠습니까?')) {
+                dbData[type].splice(index, 1);
+                if (type === 'agenda') {
+                    recalculateAgendaTimes();
+                }
+                renderAll();
+                showToast('항목이 삭제되었습니다.');
+            }
+        }
+
+        // 일반 행 추가
+        function addRow(type) {
+            if (!isEditMode) return;
+            const templates = {
+                agenda: { duration: 20, time: "", topic: "신규 세션", content: "세부 내용 입력", speaker: "담당자", status: "대기" },
+                onsite: { no: dbData.onsite.length + 1, item: "신규 역할", owner: "담당자", check: "확인 항목", details: "세부 지침 입력", status: "대기" },
+                post: { stage: "사후 관리", item: "신규 과업", check: "체크사항", content: "상세 내용", status: "대기" },
+                budget: { item: "신규 예산 항목", target: "대상/업체", price: 100000, qty: 1, proof: "세금계산서", note: "비고/세부내용" }
+            };
+            if (templates[type]) {
+                dbData[type].push(templates[type]);
+                if (type === 'agenda') {
+                    recalculateAgendaTimes();
+                }
+                renderAll();
+                showToast('새 항목이 추가되었습니다.');
+            }
+        }
+
+        // 사전 준비 - 특정 단계(Stage)에 행 추가 기능
+        function addPrepRow(stageName) {
+            if (!isEditMode) return;
+            dbData.prep.push({
+                stage: stageName,
+                item: "신규 항목",
+                check: "체크사항 / 상세 업무 내용 입력",
+                deadline: "2026-10-01(목)",
+                owner: "Sales",
+                status: "대기"
+            });
+            renderAll();
+            showToast(`[${stageName}] 보드에 새 항목이 추가되었습니다.`);
+        }
+
+        // ==========================================
+        // 🔄 아젠다 드래그 앤 드롭 Logic
+        // ==========================================
+        let draggedIndex = null;
+
+        function handleDragStart(e, index) {
+            if (!isEditMode) return;
+            draggedIndex = index;
+            e.dataTransfer.effectAllowed = 'move';
+            e.target.closest('tr').classList.add('dragging');
+        }
+
+        function handleDragOver(e, index) {
+            if (!isEditMode || draggedIndex === null) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const row = e.target.closest('tr');
+            const rect = row.getBoundingClientRect();
+            const offset = e.clientY - rect.top;
+            
+            row.classList.remove('drag-over-top', 'drag-over-bottom');
+            if (offset < rect.height / 2) {
+                row.classList.add('drag-over-top');
+            } else {
+                row.classList.add('drag-over-bottom');
+            }
+        }
+
+        function handleDragLeave(e) {
+            const row = e.target.closest('tr');
+            if (row) {
+                row.classList.remove('drag-over-top', 'drag-over-bottom');
+            }
+        }
+
+        function handleDrop(e, targetIndex) {
+            if (!isEditMode || draggedIndex === null) return;
+            e.preventDefault();
+            const row = e.target.closest('tr');
+            const rect = row.getBoundingClientRect();
+            const offset = e.clientY - rect.top;
+            row.classList.remove('drag-over-top', 'drag-over-bottom');
+
+            let newIndex = targetIndex;
+            if (offset >= rect.height / 2 && draggedIndex < targetIndex) {
+                newIndex = targetIndex;
+            } else if (offset >= rect.height / 2 && draggedIndex > targetIndex) {
+                newIndex = targetIndex + 1;
+            }
+
+            if (draggedIndex !== newIndex) {
+                const movedItem = dbData.agenda.splice(draggedIndex, 1)[0];
+                const insertAt = draggedIndex < newIndex ? newIndex - 1 : newIndex;
+                dbData.agenda.splice(insertAt, 0, movedItem);
+                
+                recalculateAgendaTimes();
+                renderAgenda();
+                showToast("세션 순서가 변경되어 시간이 자동 재계산되었습니다.");
+            }
+            draggedIndex = null;
+        }
+
+        function handleDragEnd(e) {
+            document.querySelectorAll('#agenda-table-body tr').forEach(r => {
+                r.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+            });
+            draggedIndex = null;
+        }
+
+        // 렌더링 함수들 (아젠다: 분 열 & 드래그앤드롭 & 헤더 폰트 통일)
+        function renderAgenda() {
+            const tbody = document.getElementById('agenda-table-body');
+            const editableAttr = isEditMode ? 'contenteditable="true"' : 'contenteditable="false"';
+
+            tbody.innerHTML = dbData.agenda.map((item, i) => `
+                <tr draggable="${isEditMode}" 
+                    ondragstart="handleDragStart(event, ${i})"
+                    ondragover="handleDragOver(event, ${i})"
+                    ondragleave="handleDragLeave(event)"
+                    ondrop="handleDrop(event, ${i})"
+                    ondragend="handleDragEnd(event)"
+                    class="hover:bg-slate-50 transition">
+                    
+                    <td class="admin-only p-3.5 text-center text-slate-400 align-middle">
+                        <div class="drag-handle inline-flex items-center justify-center p-1 rounded hover:bg-slate-200 text-slate-500">
+                            <i data-lucide="grip-vertical" class="w-4 h-4"></i>
+                        </div>
+                    </td>
+
+                    <td class="p-3.5 text-sm font-bold text-indigo-900 bg-indigo-50/50 rounded-lg tabular-nums align-middle">
+                        ${item.time}
+                    </td>
+
+                    <td class="p-3.5 text-center align-middle">
+                        ${isEditMode ? `
+                            <input type="text" value="${item.duration || 20}" 
+                                oninput="this.value = this.value.replace(/[^0-9]/g, '')" 
+                                onchange="updateAgendaDuration(${i}, this.value)" 
+                                class="w-14 px-1.5 py-1 border border-slate-300 bg-white rounded-lg text-center font-sans text-xs font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        ` : `
+                            <span class="font-sans text-xs font-bold tabular-nums text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">${item.duration || 20}분</span>
+                        `}
+                    </td>
+
+                    <td class="p-3.5 font-bold text-slate-900 text-sm align-middle">
+                        <span ${editableAttr} onblur="updateCell('agenda', ${i}, 'topic', this.innerText)" class="px-1 py-0.5 rounded">${item.topic}</span>
+                    </td>
+
+                    <td class="p-3.5 text-slate-600 text-sm align-middle">
+                        <span ${editableAttr} onblur="updateCell('agenda', ${i}, 'content', this.innerText)" class="px-1 py-0.5 rounded">${item.content}</span>
+                    </td>
+
+                    <td class="p-3.5 text-slate-800 font-medium text-sm align-middle">
+                        <span ${editableAttr} onblur="updateCell('agenda', ${i}, 'speaker', this.innerText)" class="px-1 py-0.5 rounded">${item.speaker}</span>
+                    </td>
+
+                    <td class="p-3.5 text-center align-middle">${getBadgeHtml(item.status, 'agenda', i)}</td>
+
+                    <td class="admin-only p-3.5 text-center align-middle">
+                        <button onclick="deleteRow('agenda', ${i})" class="text-slate-400 hover:text-rose-600 p-1">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        // 사전 준비
+        function renderPrep() {
+            const container = document.getElementById('prep-boards-container');
+            if (!container) return;
+            const editableAttr = isEditMode ? 'contenteditable="true"' : 'contenteditable="false"';
+
+            const defaultStages = ["세션 준비", "모객 준비", "사전 홍보", "진행 준비"];
+            const groups = {};
+            defaultStages.forEach(s => groups[s] = []);
+
+            dbData.prep.forEach((item, index) => {
+                const stageName = item.stage || "기타";
+                if (!groups[stageName]) groups[stageName] = [];
+                groups[stageName].push({ ...item, originalIndex: index });
+            });
+
+            const stageIcons = {
+                "세션 준비": "list-checks",
+                "모객 준비": "user-plus",
+                "사전 홍보": "megaphone",
+                "진행 준비": "clipboard-list"
+            };
+
+            let html = "";
+            for (const [stage, items] of Object.entries(groups)) {
+                if (items.length === 0 && !defaultStages.includes(stage)) continue;
+                const iconName = stageIcons[stage] || "folder";
+                html += `
+                    <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+                        <div class="bg-slate-100/80 px-5 py-3.5 border-b border-slate-200 flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <span class="p-1.5 bg-indigo-600 text-white rounded-lg flex items-center justify-center">
+                                    <i data-lucide="${iconName}" class="w-4 h-4"></i>
+                                </span>
+                                <h3 class="font-bold text-slate-900 text-sm sm:text-base">${stage}</h3>
+                                <span class="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-0.5 rounded-full ml-1">${items.length}개 과업</span>
+                            </div>
+                            <button onclick="addPrepRow('${stage}')" class="admin-only bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition">
+                                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                                <span>항목 추가</span>
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50/60 text-slate-700 text-sm border-b border-slate-200">
+                                        <th class="p-3.5 w-44 text-sm font-semibold">세부항목</th>
+                                        <th class="p-3.5 text-sm font-semibold">체크사항 / 상세 업무 내용</th>
+                                        <th class="p-3.5 w-36 text-center text-sm font-semibold">처리 기한</th>
+                                        <th class="p-3.5 w-24 text-center text-sm font-semibold">담당자</th>
+                                        <th class="p-3.5 w-28 text-center text-sm font-semibold">완료 여부</th>
+                                        <th class="admin-only p-3.5 w-14 text-center text-sm font-semibold">관리</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-sm">
+                                    ${items.length === 0 ? `
+                                        <tr>
+                                            <td colspan="6" class="p-4 text-center text-slate-400 text-xs">등록된 준비 항목이 없습니다. '+ 항목 추가'를 클릭해 작성하세요.</td>
+                                        </tr>
+                                    ` : items.map(item => {
+                                        const i = item.originalIndex;
+                                        const isEdm = item.item && item.item.includes("eDM 발송");
+                                        return `
+                                            <tr class="hover:bg-slate-50/80 transition">
+                                                <td class="p-3.5 font-bold text-slate-900 align-top">
+                                                    <span ${editableAttr} onblur="updateCell('prep', ${i}, 'item', this.innerText)" class="px-1 py-0.5 rounded">${item.item}</span>
+                                                </td>
+                                                <td class="p-3.5 text-slate-700 leading-relaxed align-top">
+                                                    <div ${editableAttr} onblur="updateCell('prep', ${i}, 'check', this.innerText)" class="px-1 py-0.5 rounded whitespace-pre-line ${isEdm ? 'bg-indigo-50/60 border border-indigo-100 p-2.5 rounded-xl font-medium text-indigo-950 shadow-2xs' : ''}">${item.check}</div>
+                                                </td>
+                                                <td class="p-3.5 text-center font-medium text-slate-600 tabular-nums align-top">
+                                                    <span ${editableAttr} onblur="updateCell('prep', ${i}, 'deadline', this.innerText)" class="px-1 py-0.5 rounded">${item.deadline}</span>
+                                                </td>
+                                                <td class="p-3.5 text-center font-semibold text-indigo-600 align-top">
+                                                    <span ${editableAttr} onblur="updateCell('prep', ${i}, 'owner', this.innerText)" class="px-1 py-0.5 rounded">${item.owner}</span>
+                                                </td>
+                                                <td class="p-3.5 text-center align-top">${getBadgeHtml(item.status, 'prep', i)}</td>
+                                                <td class="admin-only p-3.5 text-center align-top">
+                                                    <button onclick="deleteRow('prep', ${i})" class="text-slate-400 hover:text-rose-600 p-1 transition">
+                                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        function renderOnsite() {
+            const tbody = document.getElementById('onsite-table-body');
+            const editableAttr = isEditMode ? 'contenteditable="true"' : 'contenteditable="false"';
+
+            tbody.innerHTML = dbData.onsite.map((item, i) => `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-3.5 text-center text-sm font-bold text-slate-400 tabular-nums">${i + 1}</td>
+                    <td class="p-3.5 font-bold text-slate-800 text-sm">
+                        <span ${editableAttr} onblur="updateCell('onsite', ${i}, 'item', this.innerText)">${item.item}</span>
+                    </td>
+                    <td class="p-3.5 font-bold text-indigo-700 text-xs bg-indigo-50/30 rounded">
+                        <span ${editableAttr} onblur="updateCell('onsite', ${i}, 'owner', this.innerText)">${item.owner}</span>
+                    </td>
+                    <td class="p-3.5 text-slate-800 font-medium text-sm">
+                        <span ${editableAttr} onblur="updateCell('onsite', ${i}, 'check', this.innerText)">${item.check}</span>
+                    </td>
+                    <td class="p-3.5 text-slate-600 text-xs">
+                        <span ${editableAttr} onblur="updateCell('onsite', ${i}, 'details', this.innerText)">${item.details}</span>
+                    </td>
+                    <td class="p-3.5 text-center">${getBadgeHtml(item.status, 'onsite', i)}</td>
+                    <td class="admin-only p-3.5 text-center">
+                        <button onclick="deleteRow('onsite', ${i})" class="text-slate-400 hover:text-rose-600 p-1">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function renderPost() {
+            const tbody = document.getElementById('post-table-body');
+            const editableAttr = isEditMode ? 'contenteditable="true"' : 'contenteditable="false"';
+
+            tbody.innerHTML = dbData.post.map((item, i) => `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-3.5 text-xs font-bold text-slate-500">
+                        <span ${editableAttr} onblur="updateCell('post', ${i}, 'stage', this.innerText)">${item.stage}</span>
+                    </td>
+                    <td class="p-3.5 font-bold text-slate-800 text-sm">
+                        <span ${editableAttr} onblur="updateCell('post', ${i}, 'item', this.innerText)">${item.item}</span>
+                    </td>
+                    <td class="p-3.5 text-slate-600 text-sm">
+                        <span ${editableAttr} onblur="updateCell('post', ${i}, 'check', this.innerText)">${item.check}</span>
+                    </td>
+                    <td class="p-3.5 text-xs text-slate-700">
+                        <span ${editableAttr} onblur="updateCell('post', ${i}, 'content', this.innerText)">${item.content}</span>
+                    </td>
+                    <td class="p-3.5 text-center">${getBadgeHtml(item.status, 'post', i)}</td>
+                    <td class="admin-only p-3.5 text-center">
+                        <button onclick="deleteRow('post', ${i})" class="text-slate-400 hover:text-rose-600 p-1">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        // 예산 렌더링 ('증빙 자료' 열 포함)
+        function renderBudget() {
+            const tbody = document.getElementById('budget-table-body');
+            const editableAttr = isEditMode ? 'contenteditable="true"' : 'contenteditable="false"';
+            let totalSupply = 0;
+
+            const proofOptions = ["세금계산서", "법인카드", "현금", "기타"];
+            const proofColors = {
+                "세금계산서": "bg-indigo-50 text-indigo-700 border-indigo-200",
+                "법인카드": "bg-emerald-50 text-emerald-700 border-emerald-200",
+                "현금": "bg-amber-50 text-amber-700 border-amber-200",
+                "기타": "bg-slate-100 text-slate-700 border-slate-200"
+            };
+
+            tbody.innerHTML = dbData.budget.map((item, i) => {
+                const price = Number(String(item.price).replace(/[^0-9]/g, '')) || 0;
+                const qty = Number(String(item.qty).replace(/[^0-9]/g, '')) || 0;
+                const supply = price * qty;
+                const proof = item.proof || "세금계산서";
+                item.price = price;
+                item.qty = qty;
+                item.supply = supply;
+                item.proof = proof;
+                totalSupply += supply;
+
+                return `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-3 font-bold text-slate-800 text-xs">
+                            <span ${editableAttr} onblur="updateCell('budget', ${i}, 'item', this.innerText)" class="px-1 py-0.5 rounded">${item.item}</span>
+                        </td>
+                        <td class="p-3 text-slate-700 text-xs">
+                            <span ${editableAttr} onblur="updateCell('budget', ${i}, 'target', this.innerText)" class="px-1 py-0.5 rounded">${item.target}</span>
+                        </td>
+                        <td class="p-3 text-center">
+                            ${isEditMode 
+                                ? `<input type="text" value="${price.toLocaleString()}" oninput="this.value = this.value.replace(/[^0-9]/g, '').replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')" onchange="updateBudgetInput(${i}, 'price', this.value)" class="w-28 px-2 py-1 border border-slate-300 bg-white rounded-lg text-center font-sans text-xs font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500">`
+                                : `<span class="font-sans text-xs font-semibold tabular-nums text-slate-700">${price.toLocaleString()}</span>`
+                            }
+                        </td>
+                        <td class="p-3 text-center">
+                            ${isEditMode 
+                                ? `<input type="text" value="${qty}" onchange="updateBudgetInput(${i}, 'qty', this.value)" class="w-16 px-2 py-1 border border-slate-300 bg-white rounded-lg text-center font-sans text-xs font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500">`
+                                : `<span class="font-sans text-xs font-semibold tabular-nums text-slate-700">${qty}</span>`
+                            }
+                        </td>
+                        <td class="p-3 text-right font-sans font-bold text-slate-900 tabular-nums text-xs">
+                            ${supply.toLocaleString()}원
+                        </td>
+                        <td class="p-3 text-center">
+                            ${isEditMode ? `
+                                <select onchange="updateProof(${i}, this.value)" class="text-xs font-medium px-2 py-1 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    ${proofOptions.map(opt => `<option value="${opt}" ${proof === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                                </select>
+                            ` : `
+                                <span class="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-md border ${proofColors[proof] || proofColors['기타']}">
+                                    ${proof}
+                                </span>
+                            `}
+                        </td>
+                        <td class="p-3 text-slate-500 text-xs">
+                            <span ${editableAttr} onblur="updateCell('budget', ${i}, 'note', this.innerText)" class="px-1 py-0.5 rounded">${item.note}</span>
+                        </td>
+                        <td class="admin-only p-3 text-center">
+                            <button onclick="deleteRow('budget', ${i})" class="text-slate-400 hover:text-rose-600 p-1">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            const vatTotal = Math.round(totalSupply * 0.1);
+            const grandTotal = totalSupply + vatTotal;
+
+            document.getElementById('budget-supply-total').innerText = `${totalSupply.toLocaleString()}원`;
+            document.getElementById('budget-vat-total').innerText = `${vatTotal.toLocaleString()}원`;
+            document.getElementById('budget-grand-total').innerText = `${grandTotal.toLocaleString()}원`;
+
+            lucide.createIcons();
+        }
+
+        // ==========================================
+        // 엑셀 다중 시트 내보내기 (Export to Excel)
+        // ==========================================
+        function exportToExcel() {
+            try {
+                const wb = XLSX.utils.book_new();
+
+                // 1. 개요 시트
+                const overviewData = [
+                    ["항목", "내용"],
+                    ["행사명", "주민회의 2026 (ZUCONF. 2026)"],
+                    ["행사 일시", "2026-10-22(목) 13:00~17:30"],
+                    ["주최 / 주관", "(주)줌인테크 / 오토데스크"],
+                    ["예상 참석 인원", "120명 ~ 150명"],
+                    ["주 청중", "기계/제조, 건축/건설 엔지니어"],
+                    ["장소", "L7 광명 바이 롯데호텔 (별관 4F 그랜드볼룸)"],
+                    ["주소", "경기도 광명시 신기로 22 (KTX 광명역 도보 5분)"],
+                    ["행사 취지와 목적", dbData.overviewMission || initialData.overviewMission],
+                    ["", ""],
+                    ["[현장 비상 연락망]", ""],
+                    ["호텔 연회 담당자", "가동엽 매니저 (010-8360-4441)"],
+                    ["스케치 영상 촬영", "장태원 감독 (010-7733-8362)"],
+                    ["호오컨설팅 (강연 에이전시)", "박소민 매니저 (070-8855-4811)"]
+                ];
+                const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
+                XLSX.utils.book_append_sheet(wb, wsOverview, "개요");
+
+                // 2. 아젠다 시트 (소요 분 열 포함)
+                const agendaData = [
+                    ["시간", "소요시간(분)", "주제 및 세션", "세션 별 주요 내용", "발표자", "완료 여부"],
+                    ...dbData.agenda.map(a => [a.time, a.duration || 20, a.topic, a.content, a.speaker, a.status])
+                ];
+                const wsAgenda = XLSX.utils.aoa_to_sheet(agendaData);
+                XLSX.utils.book_append_sheet(wb, wsAgenda, "아젠다");
+
+                // 3. 사전 준비 시트
+                const prepData = [
+                    ["세부단계", "세부항목", "체크사항 / 상세 업무 내용", "처리 기한", "담당자", "완료 여부"],
+                    ...dbData.prep.map(p => [p.stage, p.item, p.check, p.deadline, p.owner, p.status])
+                ];
+                const wsPrep = XLSX.utils.aoa_to_sheet(prepData);
+                XLSX.utils.book_append_sheet(wb, wsPrep, "사전 준비");
+
+                // 4. 당일 담당 및 준비 시트
+                const onsiteData = [
+                    ["No", "분류항목", "담당자", "준비 및 확인 항목", "세부 내용 및 지침", "완료 여부"],
+                    ...dbData.onsite.map((o, idx) => [idx + 1, o.item, o.owner, o.check, o.details, o.status])
+                ];
+                const wsOnsite = XLSX.utils.aoa_to_sheet(onsiteData);
+                XLSX.utils.book_append_sheet(wb, wsOnsite, "당일 담당 및 준비");
+
+                // 5. 행사 후 진행 시트
+                const postData = [
+                    ["세부단계", "진행항목", "체크사항 / 상세 과업", "담당 / 내용", "완료 여부"],
+                    ...dbData.post.map(p => [p.stage, p.item, p.check, p.content, p.status])
+                ];
+                const wsPost = XLSX.utils.aoa_to_sheet(postData);
+                XLSX.utils.book_append_sheet(wb, wsPost, "행사 후 진행");
+
+                // 6. 예산 및 항목 시트 (증빙자료 열 반영)
+                let totalSupply = 0;
+                const budgetRows = dbData.budget.map(b => {
+                    const price = Number(String(b.price).replace(/[^0-9]/g, '')) || 0;
+                    const qty = Number(String(b.qty).replace(/[^0-9]/g, '')) || 0;
+                    const supply = price * qty;
+                    const proof = b.proof || "세금계산서";
+                    totalSupply += supply;
+                    return [b.item, b.target, price, qty, supply, proof, b.note];
+                });
+                const vatTotal = Math.round(totalSupply * 0.1);
+                const grandTotal = totalSupply + vatTotal;
+
+                const budgetData = [
+                    ["세부항목", "대상 / 업체", "단가(원)", "수량", "공급가액(원)", "증빙 자료", "비고 / 세부내용"],
+                    ...budgetRows,
+                    ["", "", "", "", "", "", ""],
+                    ["총 공급가액 (VAT 별도)", "", "", "", totalSupply, "", ""],
+                    ["부가세 합계 (VAT 10%)", "", "", "", vatTotal, "", ""],
+                    ["총 소요 예산 (VAT 포함)", "", "", "", grandTotal, "", ""]
+                ];
+                const wsBudget = XLSX.utils.aoa_to_sheet(budgetData);
+                XLSX.utils.book_append_sheet(wb, wsBudget, "예산 및 항목");
+
+                // 파일 다운로드 실행
+                const fileName = `주민회의_2026_통합관리_대시보드_${new Date().toISOString().slice(0, 10)}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+                showToast("엑셀 파일(.xlsx)이 성공적으로 다운로드되었습니다.");
+            } catch (err) {
+                console.error("Excel Export Error:", err);
+                alert("엑셀 파일 생성 중 오류가 발생했습니다.");
+            }
+        }
+
+        // JSON 모달 관리
+        function openJsonModal() {
+            document.getElementById('json-data-area').value = JSON.stringify(dbData, null, 2);
+            document.getElementById('json-modal').classList.remove('hidden');
+        }
+
+        function closeJsonModal() {
+            document.getElementById('json-modal').classList.add('hidden');
+        }
+
+        function copyJsonText() {
+            const textarea = document.getElementById('json-data-area');
+            textarea.select();
+            document.execCommand('copy');
+            showToast('JSON 데이터가 클립보드에 복사되었습니다.');
+        }
+
+        function applyJsonText() {
+            if (!isEditMode) {
+                alert("데이터 적용은 관리자 모드에서만 가능합니다.");
+                return;
+            }
+            try {
+                const parsed = JSON.parse(document.getElementById('json-data-area').value);
+                dbData = parsed;
+                recalculateAgendaTimes();
+                renderAll();
+                closeJsonModal();
+                showToast('새로운 JSON 데이터가 적용되었습니다.');
+            } catch (e) {
+                alert('유효하지 않은 JSON 형식입니다. 코드를 다시 확인해 주세요.');
+            }
+        }
+
+        // 전체 초기화
+        function resetData() {
+            if (!isEditMode) return;
+            if (confirm('모든 수기 수정사항을 초기화하고 문서 기본 데이터로 되돌리시겠습니까?')) {
+                dbData = JSON.parse(JSON.stringify(initialData));
+                recalculateAgendaTimes();
+                renderAll();
+                showToast('초기 데이터로 복원되었습니다.');
+            }
+        }
+
+        // 검색 필터
+        function filterDashboard() {
+            const query = document.getElementById('global-search').value.toLowerCase();
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const text = row.innerText.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        }
+
+        // 토스트 메세지
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
