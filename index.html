@@ -325,11 +325,14 @@
         </section>
 
         <section id="content-prep" class="tab-content hidden space-y-6">
-            <div class="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                 <div>
                     <h2 class="text-base font-bold text-slate-900">사전 준비 체크리스트 및 마일스톤</h2>
                     <p class="text-xs text-slate-500">세부 단계별 보드에서 각각 항목을 추가하고 관리할 수 있습니다.</p>
                 </div>
+                <button onclick="addNewPrepBoard()" class="admin-only bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 shrink-0 self-end sm:self-auto shadow-sm transition">
+                    <i data-lucide="plus" class="w-4 h-4"></i> 보드 추가
+                </button>
             </div>
             <div id="prep-boards-container" class="space-y-6">
             </div>
@@ -963,7 +966,7 @@
         function deleteRow(type, index) {
             const editable = (type === 'budget') ? (budgetAccessMode === 'edit') : isEditMode;
             if (!editable) return;
-            if (confirm('해당 항목을 삭제하시겠습니까?')) {
+            if (dbData[type] && dbData[type][index] !== undefined) {
                 dbData[type].splice(index, 1);
                 if (type === 'agenda') recalculateAgendaTimes();
                 renderAll();
@@ -998,8 +1001,44 @@
                 owner: "Sales",
                 status: "대기"
             });
+            ensureDaysOfWeek();
+            saveToLocalStorage();
             renderAll();
             showToast(`[${stageName}] 보드에 새 항목이 추가되었습니다.`);
+        }
+
+        function addNewPrepBoard() {
+            if (!isEditMode) return;
+            const stageName = prompt('추가할 새로운 보드(단계)의 이름을 입력하세요:', '신규 단계');
+            if (!stageName || !stageName.trim()) return;
+
+            const trimmedStage = stageName.trim();
+            dbData.prep.push({
+                stage: trimmedStage,
+                item: "신규 항목",
+                check: "체크 사항 / 상세 업무 내용 입력",
+                deadline: "2026-10-01(목)",
+                owner: "Sales",
+                status: "대기"
+            });
+            ensureDaysOfWeek();
+            saveToLocalStorage();
+            renderAll();
+            showToast(`[${trimmedStage}] 보드가 새롭게 추가되었습니다.`);
+        }
+
+        function updateStageName(oldStage, newStage) {
+            if (!isEditMode) return;
+            const trimmed = newStage.trim();
+            if (!trimmed || trimmed === oldStage) return;
+            dbData.prep.forEach(item => {
+                if (item.stage === oldStage) {
+                    item.stage = trimmed;
+                }
+            });
+            saveToLocalStorage();
+            renderPrep();
+            showToast(`보드 이름이 [${trimmed}](으)로 변경되었습니다.`);
         }
 
         let draggedIndex = null;
@@ -1145,7 +1184,10 @@
 
             const defaultStages = ["세션 준비", "모객 준비", "사전 홍보", "진행 준비"];
             const groups = {};
-            defaultStages.forEach(s => groups[s] = []);
+
+            defaultStages.forEach(s => {
+                groups[s] = [];
+            });
 
             dbData.prep.forEach((item, index) => {
                 const stageName = item.stage || "기타";
@@ -1166,7 +1208,7 @@
                                 <span class="p-1.5 bg-indigo-600 text-white rounded-lg flex items-center justify-center">
                                     <i data-lucide="${iconName}" class="w-4 h-4"></i>
                                 </span>
-                                <h3 class="font-bold text-slate-900 sm:text-base text-sm">${stage}</h3>
+                                <h3 class="font-bold text-slate-900 sm:text-base text-sm" ${editableAttr} onblur="updateStageName('${stage}', this.innerText)">${stage}</h3>
                                 <span class="bg-indigo-100 text-indigo-700 font-bold px-2.5 py-0.5 rounded-full ml-1 text-xs">${items.length}개 과업</span>
                             </div>
                             <button onclick="addPrepRow('${stage}')" class="admin-only bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition">
@@ -1508,7 +1550,7 @@
                 showToast("엑셀 파일(.xlsx)이 성공적으로 다운로드되었습니다.");
             } catch (err) {
                 console.error("Excel Export Error:", err);
-                alert("엑셀 파일 생성 중 오류가 발생했습니다.");
+                showToast("엑셀 파일 생성 중 오류가 발생했습니다.");
             }
         }
 
@@ -1530,7 +1572,7 @@
 
         function applyJsonText() {
             if (!isEditMode) {
-                alert("데이터 적용은 관리자 모드에서만 가능합니다.");
+                showToast("데이터 적용은 관리자 모드에서만 가능합니다.");
                 return;
             }
             try {
@@ -1541,18 +1583,16 @@
                 closeJsonModal();
                 showToast('새로운 JSON 데이터가 적용되었습니다.');
             } catch (e) {
-                alert('유효하지 않은 JSON 형식입니다. 코드를 다시 확인해 주세요.');
+                showToast('유효하지 않은 JSON 형식입니다. 코드를 다시 확인해 주세요.');
             }
         }
 
         function resetData() {
             if (!isEditMode) return;
-            if (confirm('모든 수기 수정사항을 초기화하고 문서 기본 데이터로 되돌리시겠습니까?')) {
-                dbData = JSON.parse(JSON.stringify(initialData));
-                recalculateAgendaTimes();
-                renderAll();
-                showToast('초기 데이터로 복원되었습니다.');
-            }
+            dbData = JSON.parse(JSON.stringify(initialData));
+            recalculateAgendaTimes();
+            renderAll();
+            showToast('초기 데이터로 복원되었습니다.');
         }
 
         function filterDashboard() {
