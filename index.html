@@ -314,7 +314,7 @@
                             <th class="p-3.5 w-60 font-semibold">주제 및 세션</th>
                             <th class="p-3.5 w-60 font-semibold">세션 별 주요 내용</th>
                             <th class="p-3.5 w-32 font-semibold">발표자</th>
-                            <th class="p-3.5 w-28 text-center font-semibold">완료 여부</th>
+                            <th class="p-3.5 w-28 text-center font-semibold">확정 여부</th>
                             <th class="admin-only p-3.5 w-16 text-center font-semibold">삭제</th>
                         </tr>
                     </thead>
@@ -364,7 +364,7 @@
                             <th class="p-3.5 w-28 font-semibold">담당자</th>
                             <th class="p-3.5 w-48 font-semibold">준비 및 확인 항목</th>
                             <th class="p-3.5 font-semibold">세부 내용 및 지침</th>
-                            <th class="p-3.5 w-28 text-center font-semibold">완료 여부</th>
+                            <th class="p-3.5 w-28 text-center font-semibold">확정 여부</th>
                             <th class="admin-only p-3.5 w-16 text-center font-semibold">삭제</th>
                         </tr>
                     </thead>
@@ -393,7 +393,7 @@
                             <th class="p-3.5 w-48 font-semibold">진행 항목</th>
                             <th class="p-3.5 w-72 font-semibold">체크 사항 / 상세 과업</th>
                             <th class="p-3.5 w-36 font-semibold">담당</th>
-                            <th class="p-3.5 w-28 text-center font-semibold">완료 여부</th>
+                            <th class="p-3.5 w-28 text-center font-semibold">확정 여부</th>
                             <th class="admin-only p-3.5 w-16 text-center font-semibold">삭제</th>
                         </tr>
                     </thead>
@@ -565,13 +565,13 @@
         const initialData = {
             overviewMission: "“주민회의\"는 줌인테크가 주최하고 오토데스크가 함께하는 고객 중심의 컨퍼런스입니다. 기계 제조 분야에서 건축, 건설 분야까지 설계 자동화 · 디지털 전환, 그리고 실제 고객 사례를 바탕으로 고객과 파트너가 함께 연결되어 새로운 기회와 혁신을 탐험합니다.",
             agenda: [
-                { duration: 30, time: "13:00 ~ 13:30", topic: "오프닝 & 회사 소개", content: "행사 개요 및 참석자 감사 인사, 회사 소개 및 자동화/개발 프로젝트 소개", speaker: "줌인테크", status: "완료" },
+                { duration: 30, time: "13:00 ~ 13:30", topic: "오프닝 & 회사 소개", content: "행사 개요 및 참석자 감사 인사, 회사 소개 및 자동화/개발 프로젝트 소개", speaker: "줌인테크", status: "확정" },
                 { duration: 40, time: "13:30 ~ 14:10", topic: "D&M, A&E 세션", content: "제조 분야 AI 핵심 기술 동향 및 비전 / 건축·건설 분야 AI 적용 트렌드", speaker: "오토데스크", status: "진행중" },
                 { duration: 20, time: "14:10 ~ 14:30", topic: "Break & Networking", content: "네트워킹 및 휴식", speaker: "-", status: "진행중" },
                 { duration: 20, time: "14:30 ~ 14:50", topic: "AI기반 자동화 설계-고객 성공 사례 발표(1)", content: "에이치앤이루자 AI 설계 자동화 사례", speaker: "에이치앤이루자", status: "진행중" },
                 { duration: 20, time: "14:50 ~ 15:10", topic: "BIM 도입 및 적용-고객 성공 사례 발표(2)", content: "YP디자인그룹 BIM 도입 과정 및 적용 사례", speaker: "YP디자인그룹", status: "진행중" },
                 { duration: 20, time: "15:10 ~ 15:30", topic: "Break & Networking", content: "네트워킹 및 휴식", speaker: "-", status: "진행중" },
-                { duration: 60, time: "15:30 ~ 16:30", topic: "AI 시대의 성과를 만드는 리더십", content: "AI 전문가 특별 세션 (조용민 대표 초청 강연)", speaker: "조용민 대표", status: "완료" },
+                { duration: 60, time: "15:30 ~ 16:30", topic: "AI 시대의 성과를 만드는 리더십", content: "AI 전문가 특별 세션 (조용민 대표 초청 강연)", speaker: "조용민 대표", status: "확정" },
                 { duration: 20, time: "16:30 ~ 16:50", topic: "A&E 관련 세션", content: "건축/건설 솔루션 세션 (최은석 컨설턴트)", speaker: "줌인테크", status: "대기" },
                 { duration: 20, time: "16:50 ~ 17:10", topic: "Works AI", content: "산업별 AI 업무 환경 구축 방안 및 사례", speaker: "Works AI", status: "진행중" },
                 { duration: 20, time: "17:10 ~ 17:30", topic: "맺음말", content: "향후 계획 안내 및 세미나 종료", speaker: "줌인테크", status: "대기" }
@@ -581,7 +581,7 @@
                 { stage: "세션 준비", item: "발표자 섭외", check: "① 오토데스크 세션 키노트\n② 고객 발표자(D&M, A&E 각 1명) 섭외 확정", deadline: "2026-08-28(금)", owner: "Sales", status: "진행중" },
                 { stage: "모객 준비", item: "기존 고객 리스트 업", check: "각 산업별 전체 고객 및 타겟 리스트업 작성", deadline: "2026-08-31(월)", owner: "Sales", status: "진행중" },
                 { stage: "모객 준비", item: "각 협단체 리스트업", check: "각 산업별 관련 협단체 및 기관 전체 대상자 리스트업", deadline: "2026-09-04(금)", owner: "Sales", status: "대기" },
-                { stage: "모객 준비", item: "대상자 Call Touch", check: "① 대상자별 담당 지정\n② 9/7(월) 시작 매일 체크 및 콜 터치 완료", deadline: "2026-09-07(월)", owner: "Sales", status: "대기" },
+                { stage: "모객 준비", item: "대상자 Call Touch", check: "① 대상자별 담당 지정\n② 9/7(월) 시작 매일 체크 및 콜 터치 확정", deadline: "2026-09-07(월)", owner: "Sales", status: "대기" },
                 { stage: "사전 홍보", item: "사전등록 페이지", check: "줌인테크 홈페이지 내 공식 행사 사전등록 랜딩 페이지 구축", deadline: "2026-09-14(월)", owner: "MKT", status: "대기" },
                 { stage: "사전 홍보", item: "eDM 디자인", check: "사전등록 페이지 연동 템플릿, 웹 디자인, HTML 코딩 및 QR코드 적용", deadline: "2026-09-14(월)", owner: "MKT", status: "대기" },
                 { stage: "사전 홍보", item: "eDM 발송 (총 8회)", check: "1차 9/21(월), 2차 9/29(화), 3차 10/2(금), 4차 10/7(수), 5차 10/12(월), 6차 10/14(수), 7차 10/19(월), 8차 10/21(수)\n(※ 두비즈 플랫폼 별도 3회 발송 포함)", deadline: "2026-09-21(월)", owner: "MKT", status: "대기" },
@@ -887,18 +887,18 @@
 
         function getBadgeHtml(status, type, index) {
             const colors = {
-                '완료': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+                '확정': 'bg-emerald-100 text-emerald-800 border-emerald-300',
                 '진행중': 'bg-blue-100 text-blue-800 border-blue-300',
                 '대기': 'bg-amber-100 text-amber-800 border-amber-300',
                 '지연': 'bg-rose-100 text-rose-800 border-rose-300'
             };
-            const icons = { '완료': '🟢 완료', '진행중': '🔵 진행중', '대기': '🟡 대기', '지연': '🔴 지연' };
+            const icons = { '확정': '🟢 확정', '진행중': '🔵 진행중', '대기': '🟡 대기', '지연': '🔴 지연' };
             const current = status || '대기';
 
             if (isEditMode) {
                 return `
                     <select onchange="updateStatus('${type}', ${index}, this.value)" class="text-xs font-bold px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none transition ${colors[current] || colors['대기']}">
-                        <option value="완료" ${current === '완료' ? 'selected' : ''}>🟢 완료</option>
+                        <option value="확정" ${current === '확정' ? 'selected' : ''}>🟢 확정</option>
                         <option value="진행중" ${current === '진행중' ? 'selected' : ''}>🔵 진행중</option>
                         <option value="대기" ${current === '대기' ? 'selected' : ''}>🟡 대기</option>
                         <option value="지연" ${current === '지연' ? 'selected' : ''}>🔴 지연</option>
@@ -1223,7 +1223,7 @@
                                         <th class="p-3.5 w-72 font-semibold">체크 사항 / 상세 업무 내용</th>
                                         <th class="p-3.5 w-36 text-center font-semibold">처리 기한</th>
                                         <th class="p-3.5 w-24 text-center font-semibold">담당자</th>
-                                        <th class="p-3.5 w-28 text-center font-semibold">완료 여부</th>
+                                        <th class="p-3.5 w-28 text-center font-semibold">확정 여부</th>
                                         <th class="admin-only p-3.5 w-14 text-center font-semibold">관리</th>
                                     </tr>
                                 </thead>
@@ -1499,25 +1499,25 @@
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(overviewData), "개요");
 
                 const agendaData = [
-                    ["시간", "소요시간(분)", "주제 및 세션", "세션 별 주요 내용", "발표자", "완료 여부"],
+                    ["시간", "소요시간(분)", "주제 및 세션", "세션 별 주요 내용", "발표자", "확정 여부"],
                     ...dbData.agenda.map(a => [a.time, a.duration || 20, a.topic, a.content, a.speaker, a.status])
                 ];
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(agendaData), "아젠다");
 
                 const prepData = [
-                    ["세부단계", "세부항목", "체크사항 / 상세 업무 내용", "처리 기한", "담당자", "완료 여부"],
+                    ["세부단계", "세부항목", "체크사항 / 상세 업무 내용", "처리 기한", "담당자", "확정 여부"],
                     ...dbData.prep.map(p => [p.stage, p.item, p.check, p.deadline, p.owner, p.status])
                 ];
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(prepData), "사전 준비");
 
                 const onsiteData = [
-                    ["No", "분류항목", "담당자", "준비 및 확인 항목", "세부 내용 및 지침", "완료 여부"],
+                    ["No", "분류항목", "담당자", "준비 및 확인 항목", "세부 내용 및 지침", "확정 여부"],
                     ...dbData.onsite.map((o, idx) => [idx + 1, o.item, o.owner, o.check, o.details, o.status])
                 ];
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(onsiteData), "당일 담당 및 준비");
 
                 const postData = [
-                    ["진행 항목", "체크 사항 / 상세 과업", "담당", "완료 여부"],
+                    ["진행 항목", "체크 사항 / 상세 과업", "담당", "확정 여부"],
                     ...dbData.post.map(p => [p.item, p.check, p.owner || "", p.status])
                 ];
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(postData), "행사 후 진행");
