@@ -1043,6 +1043,99 @@
 
         let draggedIndex = null;
         let draggedType = null;
+        let draggedBoardIndex = null;
+
+        function getPrepStageOrder() {
+            const stageOrder = [];
+            if (dbData.prep && Array.isArray(dbData.prep)) {
+                dbData.prep.forEach(item => {
+                    const s = item.stage || "기타";
+                    if (!stageOrder.includes(s)) stageOrder.push(s);
+                });
+            }
+            const defaultStages = ["세션 준비", "모객 준비", "사전 홍보", "진행 준비"];
+            defaultStages.forEach(s => {
+                if (!stageOrder.includes(s)) stageOrder.push(s);
+            });
+            return stageOrder;
+        }
+
+        function handleBoardDragStart(e, stageIdx) {
+            if (!isEditMode) return;
+            if (e.target.closest('[contenteditable="true"]') || e.target.closest('input') || e.target.closest('button') || e.target.closest('select')) {
+                e.preventDefault();
+                return;
+            }
+            draggedBoardIndex = stageIdx;
+            e.dataTransfer.effectAllowed = 'move';
+            const board = e.target.closest('.prep-board-card');
+            if (board) board.classList.add('dragging');
+        }
+
+        function handleBoardDragOver(e, stageIdx) {
+            if (!isEditMode || draggedBoardIndex === null) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const board = e.target.closest('.prep-board-card');
+            if (!board) return;
+            const rect = board.getBoundingClientRect();
+            const offset = e.clientY - rect.top;
+            
+            board.classList.remove('drag-over-top', 'drag-over-bottom');
+            if (offset < rect.height / 2) {
+                board.classList.add('drag-over-top');
+            } else {
+                board.classList.add('drag-over-bottom');
+            }
+        }
+
+        function handleBoardDrop(e, targetStageIdx) {
+            if (!isEditMode || draggedBoardIndex === null) return;
+            e.preventDefault();
+            const board = e.target.closest('.prep-board-card');
+            if (!board) return;
+            const rect = board.getBoundingClientRect();
+            const offset = e.clientY - rect.top;
+            board.classList.remove('drag-over-top', 'drag-over-bottom');
+
+            let newIdx = targetStageIdx;
+            if (offset >= rect.height / 2 && draggedBoardIndex < targetStageIdx) {
+                newIdx = targetStageIdx;
+            } else if (offset >= rect.height / 2 && draggedBoardIndex > targetStageIdx) {
+                newIdx = targetStageIdx + 1;
+            }
+
+            if (draggedBoardIndex !== newIdx) {
+                const stageOrder = getPrepStageOrder();
+                const movedStage = stageOrder.splice(draggedBoardIndex, 1)[0];
+                const insertAt = draggedBoardIndex < newIdx ? newIdx - 1 : newIdx;
+                stageOrder.splice(insertAt, 0, movedStage);
+
+                let newPrep = [];
+                stageOrder.forEach(stg => {
+                    const items = dbData.prep.filter(item => (item.stage || "기타") === stg);
+                    newPrep.push(...items);
+                });
+                dbData.prep.forEach(item => {
+                    if (!stageOrder.includes(item.stage || "기타")) {
+                        newPrep.push(item);
+                    }
+                });
+                dbData.prep = newPrep;
+
+                saveToLocalStorage();
+                renderPrep();
+                showToast("보드 순서가 변경되었습니다.");
+            }
+            draggedBoardIndex = null;
+        }
+
+        function handleBoardDragEnd(e) {
+            document.querySelectorAll('.prep-board-card').forEach(b => {
+                b.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+            });
+            draggedBoardIndex = null;
+        }
 
         function handleDragStart(e, index, type) {
             const editable = (type === 'budget') ? (budgetAccessMode === 'edit') : isEditMode;
@@ -1073,9 +1166,9 @@
         }
 
         function handleDragLeave(e) {
-            const row = e.target.closest('tr');
-            if (row) {
-                row.classList.remove('drag-over-top', 'drag-over-bottom');
+            const elem = e.target.closest('tr') || e.target.closest('.prep-board-card');
+            if (elem) {
+                elem.classList.remove('drag-over-top', 'drag-over-bottom');
             }
         }
 
@@ -1183,9 +1276,10 @@
             const editableAttr = isEditMode ? 'contenteditable="true"' : 'contenteditable="false"';
 
             const defaultStages = ["세션 준비", "모객 준비", "사전 홍보", "진행 준비"];
+            const stageOrder = getPrepStageOrder();
             const groups = {};
 
-            defaultStages.forEach(s => {
+            stageOrder.forEach(s => {
                 groups[s] = [];
             });
 
@@ -1198,13 +1292,23 @@
             const stageIcons = { "세션 준비": "list-checks", "모객 준비": "user-plus", "사전 홍보": "megaphone", "진행 준비": "clipboard-list" };
 
             let html = "";
-            for (const [stage, items] of Object.entries(groups)) {
-                if (items.length === 0 && !defaultStages.includes(stage)) continue;
+            stageOrder.forEach((stage, stageIdx) => {
+                const items = groups[stage] || [];
+                if (items.length === 0 && !defaultStages.includes(stage)) return;
                 const iconName = stageIcons[stage] || "folder";
                 html += `
-                    <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+                    <div draggable="${isEditMode}"
+                        ondragstart="handleBoardDragStart(event, ${stageIdx})"
+                        ondragover="handleBoardDragOver(event, ${stageIdx})"
+                        ondragleave="handleDragLeave(event)"
+                        ondrop="handleBoardDrop(event, ${stageIdx})"
+                        ondragend="handleBoardDragEnd(event)"
+                        class="prep-board-card bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden transition">
                         <div class="bg-slate-100/80 px-5 py-3.5 border-b border-slate-200 flex justify-between items-center">
                             <div class="flex items-center gap-2">
+                                <div class="admin-only drag-handle inline-flex items-center justify-center p-1 rounded hover:bg-slate-200 text-slate-500" title="보드 순서 이동">
+                                    <i data-lucide="grip-vertical" class="w-4 h-4"></i>
+                                </div>
                                 <span class="p-1.5 bg-indigo-600 text-white rounded-lg flex items-center justify-center">
                                     <i data-lucide="${iconName}" class="w-4 h-4"></i>
                                 </span>
@@ -1257,7 +1361,7 @@
                         </div>
                     </div>
                 `;
-            }
+            });
             container.innerHTML = html;
             if(window.lucide) lucide.createIcons();
         }
