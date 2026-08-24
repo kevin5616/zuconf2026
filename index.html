@@ -481,8 +481,8 @@
                             <tr class="bg-slate-100 text-slate-700 border-b border-slate-200 text-xs">
                                 <th id="th-budget-drag" class="hidden p-3.5 w-10 text-center font-semibold">이동</th>
                                 <th class="p-3.5 w-14 text-center font-semibold">No.</th>
-                                <th class="p-3.5 w-40 font-semibold">세부항목</th>
-                                <th class="p-3.5 w-36 font-semibold">대상/업체</th>
+                                <th class="p-3.5 w-40 font-semibold">대상/업체명</th>
+                                <th class="p-3.5 w-36 font-semibold">세부 품목 및 내용</th>
                                 <th class="p-3.5 w-28 text-center font-semibold">단가(원)</th>
                                 <th class="p-3.5 w-20 text-center font-semibold">수량</th>
                                 <th class="p-3.5 w-32 text-right font-semibold">공급가액(원)</th>
@@ -1060,7 +1060,7 @@
                 agenda: { duration: 20, time: "", topic: "신규 세션", content: "세부 내용 입력", speaker: "담당자", status: "대기" },
                 onsite: { no: dbData.onsite.length + 1, item: "신규 역할", owner: "담당자", check: "확인 항목", details: "세부 지침 입력", status: "대기" },
                 post: { item: "신규 진행 항목", check: "체크 사항 / 상세 과업 입력", owner: "", status: "대기" },
-                budget: { item: "신규 예산 항목", target: "대상/업체", price: 100000, qty: 1, proof: "세금계산서", note: "비고/세부내용" }
+                budget: { item: "신규 예산 항목", target: "대상/업체명", price: 100000, qty: 1, proof: "세금계산서", note: "비고/세부내용" }
             };
             if (templates[type]) {
                 dbData[type].push(templates[type]);
