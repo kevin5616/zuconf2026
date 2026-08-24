@@ -21,9 +21,9 @@
         
         .tabular-nums { font-variant-numeric: tabular-nums; }
 
-        tr.dragging { opacity: 0.4; background-color: #e0e7ff !important; }
-        tr.drag-over-top { border-top: 3px solid #4f46e5 !important; }
-        tr.drag-over-bottom { border-bottom: 3px solid #4f46e5 !important; }
+        tr.dragging, .board-card.dragging { opacity: 0.4; background-color: #e0e7ff !important; }
+        tr.drag-over-top, .board-card.drag-over-top { border-top: 3px solid #4f46e5 !important; }
+        tr.drag-over-bottom, .board-card.drag-over-bottom { border-bottom: 3px solid #4f46e5 !important; }
         .drag-handle { cursor: grab; }
         .drag-handle:active { cursor: grabbing; }
     </style>
@@ -49,6 +49,11 @@
                     <button id="btn-auth-toggle" onclick="handleAuthButtonClick()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition">
                         <i id="auth-icon" data-lucide="lock" class="w-4 h-4 text-amber-400"></i>
                         <span id="auth-btn-text">관리자 모드</span>
+                    </button>
+
+                    <button onclick="loadFromGoogleSheets(true)" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium px-3 py-2 rounded-lg flex items-center gap-1.5 transition" title="구글 시트에서 최신 데이터 다시 불러오기">
+                        <i data-lucide="refresh-cw" class="w-4 h-4 text-indigo-400"></i>
+                        <span>동기화</span>
                     </button>
 
                     <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition shadow-sm">
@@ -114,6 +119,7 @@
             </nav>
         </div>
 
+        <!-- Section 1: Overview -->
         <section id="content-overview" class="tab-content space-y-6">
             <div class="bg-white border border-indigo-100 rounded-2xl p-6 shadow-sm relative">
                 <div class="flex items-center justify-between mb-3">
@@ -293,6 +299,7 @@
             </div>
         </section>
 
+        <!-- Section 2: Agenda -->
         <section id="content-agenda" class="tab-content hidden space-y-4">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                 <div>
@@ -324,11 +331,12 @@
             </div>
         </section>
 
+        <!-- Section 3: Prep -->
         <section id="content-prep" class="tab-content hidden space-y-6">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                 <div>
                     <h2 class="text-base font-bold text-slate-900">사전 준비 체크리스트 및 마일스톤</h2>
-                    <p class="text-xs text-slate-500">세부 단계별 보드에서 각각 항목을 추가하고 관리할 수 있습니다.</p>
+                    <p class="text-xs text-slate-500">관리자 모드에서 보드 좌측 핸들 아이콘을 끌어 보드 순서를 바꿀 수 있습니다.</p>
                 </div>
                 <button onclick="addNewPrepBoard()" class="admin-only bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 shrink-0 self-end sm:self-auto shadow-sm transition">
                     <i data-lucide="plus" class="w-4 h-4"></i> 보드 추가
@@ -338,6 +346,7 @@
             </div>
         </section>
 
+        <!-- Section 4: Onsite -->
         <section id="content-onsite" class="tab-content hidden space-y-4">
             <div class="bg-indigo-900 text-white p-4 rounded-xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div class="flex items-center gap-3">
@@ -374,6 +383,7 @@
             </div>
         </section>
 
+        <!-- Section 5: Post -->
         <section id="content-post" class="tab-content hidden space-y-4">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                 <div>
@@ -403,6 +413,7 @@
             </div>
         </section>
 
+        <!-- Section 6: Budget -->
         <section id="content-budget" class="tab-content hidden space-y-6">
             <div id="budget-locked-screen" class="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm text-center space-y-4 my-8">
                 <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
@@ -529,7 +540,7 @@
                 </button>
             </div>
             <p class="text-xs text-slate-500">
-                대시보드의 현재 모든 수기 수정 데이터 및 진행 상태가 포함된 JSON입니다. 복사하여 백업하거나, 수정된 JSON을 붙여넣어 업데이트할 수 있습니다.
+                대시보드의 현재 모든 수기 수정 데이터 및 진행 상태가 포함된 JSON입니다.
             </p>
             <textarea id="json-data-area" class="w-full h-64 font-mono text-xs p-3 bg-slate-900 text-emerald-400 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
             <div class="flex justify-between items-center pt-2">
@@ -551,16 +562,19 @@
     <!-- Toast Notification -->
     <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-xs flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
         <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
-        <span id="toast-message">수정사항이 반영되었습니다.</span>
+        <span id="toast-message">동기화가 완료되었습니다.</span>
     </div>
 
     <script>
+        // 발급받으신 Google Apps Script Web App API URL
+        const GOOGLE_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbwUBVr79Nbv00RFARDbKPvNhNswAPq0o0Uivlx8FtQUlZChbWXyU9TL1Lr7k6NZL2JjZg/exec";
+
         const DEFAULT_PW_PLAIN = "2026";
         const ADMIN_PW_HASH = "b328a2a8db42cb8fae2390f7a0ea26df3228a6f3b06329c298064d8a57ebf76f";
         
         let isEditMode = sessionStorage.getItem('zuconf_admin_auth') === 'true';
         let budgetAccessMode = sessionStorage.getItem('zuconf_budget_auth') || 'locked';
-        let modalAuthType = 'global'; // 'global' | 'budget'
+        let modalAuthType = 'global';
 
         const initialData = {
             overviewMission: "“주민회의\"는 줌인테크가 주최하고 오토데스크가 함께하는 고객 중심의 컨퍼런스입니다. 기계 제조 분야에서 건축, 건설 분야까지 설계 자동화 · 디지털 전환, 그리고 실제 고객 사례를 바탕으로 고객과 파트너가 함께 연결되어 새로운 기회와 혁신을 탐험합니다.",
@@ -637,7 +651,14 @@
             dbData = JSON.parse(JSON.stringify(initialData));
         }
 
-        // Auto date & day of week formatter
+        let stageOrder = [];
+        try {
+            const savedStageOrder = localStorage.getItem('zuconf_2026_stage_order');
+            stageOrder = savedStageOrder ? JSON.parse(savedStageOrder) : [];
+        } catch(e) {
+            stageOrder = [];
+        }
+
         function ensureDaysOfWeek() {
             const days = ['일', '월', '화', '수', '목', '금', '토'];
             if (dbData.prep && Array.isArray(dbData.prep)) {
@@ -661,7 +682,58 @@
             recalculateAgendaTimes();
             updateEditModeUI();
             renderAll();
+            loadFromGoogleSheets();
         });
+
+        // 1. 구글 시트에서 최신 데이터 가져오기 (GET)
+        async function loadFromGoogleSheets(isManual = false) {
+            if (!GOOGLE_SCRIPT_API_URL) return;
+            try {
+                if (isManual) showToast("구글 시트에서 최신 데이터를 불러오는 중입니다...");
+                const response = await fetch(GOOGLE_SCRIPT_API_URL);
+                const result = await response.json();
+                if (result.status === "success" && result.data) {
+                    if (result.data.agenda && result.data.agenda.length > 0) {
+                        dbData = result.data;
+                        ensureDaysOfWeek();
+                        recalculateAgendaTimes();
+                        saveToLocalStorage();
+                        renderAll();
+                        showToast("구글 시트의 최신 데이터가 성공적으로 동기화되었습니다.");
+                    } else if (isManual) {
+                        showToast("구글 시트에 저장된 데이터가 없습니다. 먼저 [관리자 모드]에서 시트로 전송하세요.");
+                    }
+                }
+            } catch (e) {
+                console.warn("구글 시트 로드 실패:", e);
+                if (isManual) showToast("구글 시트 연동 실패: 로컬 데이터를 사용합니다.");
+            }
+        }
+
+        // 2. 관리자 모드 수정 시 구글 시트로 자동 전송 (POST)
+        let syncTimeout = null;
+        function syncToGoogleSheetsDebounced() {
+            if (!GOOGLE_SCRIPT_API_URL) return;
+            if (syncTimeout) clearTimeout(syncTimeout);
+            syncTimeout = setTimeout(() => {
+                syncToGoogleSheets();
+            }, 800);
+        }
+
+        async function syncToGoogleSheets() {
+            if (!GOOGLE_SCRIPT_API_URL) return;
+            try {
+                await fetch(GOOGLE_SCRIPT_API_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(dbData)
+                });
+                showToast("구글 시트에 최신 데이터가 실시간 자동 저장되었습니다.");
+            } catch (e) {
+                console.error("구글 시트 저장 오류:", e);
+            }
+        }
 
         function calculateDDay() {
             const eventDate = new Date('2026-10-22T00:00:00');
@@ -671,7 +743,6 @@
             const diffTime = eventDate - today;
             let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             
-            // Include today in countdown
             if (diffDays > 0) diffDays += 1;
 
             const ddayElem = document.getElementById('dday-tag');
@@ -689,7 +760,7 @@
         function recalculateAgendaTimes() {
             if (!dbData.agenda || dbData.agenda.length === 0) return;
             
-            let currentMinutes = 13 * 60; // 13:00 = 780 minutes
+            let currentMinutes = 13 * 60;
             dbData.agenda.forEach(item => {
                 const duration = Number(item.duration) || 20;
                 item.duration = duration;
@@ -781,7 +852,7 @@
                         isAuthenticated = true;
                     }
                 } catch (e) {
-                    console.warn("Crypto fallback triggered:", e);
+                    console.warn("Crypto fallback:", e);
                 }
             }
 
@@ -840,7 +911,7 @@
                 if (authIcon) authIcon.setAttribute('data-lucide', 'unlock');
                 modeBadge.className = "bg-rose-100 text-rose-700 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 border border-rose-200";
                 modeBadge.innerHTML = `<i data-lucide="unlock" class="w-3.5 h-3.5 text-rose-600"></i> 전체 편집 모드 활성화 중`;
-                modeGuide.innerText = "텍스트, 단가, 수량을 자유롭게 수정할 수 있으며 실시간 자동 저장됩니다.";
+                modeGuide.innerText = "텍스트, 단가, 수량을 자유롭게 수정할 수 있으며 구글 시트로 실시간 저장됩니다.";
                 if (overviewTextarea) overviewTextarea.removeAttribute('readonly');
                 if (overviewBadge) {
                     overviewBadge.innerText = "수기 수정 가능";
@@ -877,12 +948,14 @@
 
         function saveToLocalStorage() {
             localStorage.setItem('zuconf_2026_data', JSON.stringify(dbData));
+            localStorage.setItem('zuconf_2026_stage_order', JSON.stringify(stageOrder));
         }
 
         function saveOverviewText() {
             if (!isEditMode) return;
             dbData.overviewMission = document.getElementById('overview-mission').value;
             saveToLocalStorage();
+            syncToGoogleSheetsDebounced();
         }
 
         function getBadgeHtml(status, type, index) {
@@ -918,6 +991,7 @@
             if (dbData[type] && dbData[type][index]) {
                 dbData[type][index].status = value;
                 renderAll();
+                syncToGoogleSheetsDebounced();
                 showToast(`상태가 [${value}](으)로 업데이트되었습니다.`);
             }
         }
@@ -929,6 +1003,7 @@
                 dbData[type][index][field] = value.trim();
                 saveToLocalStorage();
                 if (type === 'budget') renderBudgetUI();
+                syncToGoogleSheetsDebounced();
             }
         }
 
@@ -939,7 +1014,8 @@
                 dbData.agenda[index].duration = duration;
                 recalculateAgendaTimes();
                 renderAgenda();
-                showToast(`소요 시간이 [${duration}분]으로 변경되어 타임테이블이 자동 재계산되었습니다.`);
+                syncToGoogleSheetsDebounced();
+                showToast(`소요 시간이 [${duration}분]으로 변경되어 자동 재계산되었습니다.`);
             }
         }
 
@@ -949,6 +1025,7 @@
                 dbData.budget[index].proof = value;
                 saveToLocalStorage();
                 renderBudgetUI();
+                syncToGoogleSheetsDebounced();
                 showToast(`증빙 자료가 [${value}](으)로 설정되었습니다.`);
             }
         }
@@ -960,6 +1037,7 @@
                 dbData.budget[index][field] = num;
                 saveToLocalStorage();
                 renderBudgetUI();
+                syncToGoogleSheetsDebounced();
             }
         }
 
@@ -970,6 +1048,7 @@
                 dbData[type].splice(index, 1);
                 if (type === 'agenda') recalculateAgendaTimes();
                 renderAll();
+                syncToGoogleSheetsDebounced();
                 showToast('항목이 삭제되었습니다.');
             }
         }
@@ -987,6 +1066,7 @@
                 dbData[type].push(templates[type]);
                 if (type === 'agenda') recalculateAgendaTimes();
                 renderAll();
+                syncToGoogleSheetsDebounced();
                 showToast('새 항목이 추가되었습니다.');
             }
         }
@@ -1004,6 +1084,7 @@
             ensureDaysOfWeek();
             saveToLocalStorage();
             renderAll();
+            syncToGoogleSheetsDebounced();
             showToast(`[${stageName}] 보드에 새 항목이 추가되었습니다.`);
         }
 
@@ -1013,6 +1094,9 @@
             if (!stageName || !stageName.trim()) return;
 
             const trimmedStage = stageName.trim();
+            if (!stageOrder.includes(trimmedStage)) {
+                stageOrder.push(trimmedStage);
+            }
             dbData.prep.push({
                 stage: trimmedStage,
                 item: "신규 항목",
@@ -1024,6 +1108,7 @@
             ensureDaysOfWeek();
             saveToLocalStorage();
             renderAll();
+            syncToGoogleSheetsDebounced();
             showToast(`[${trimmedStage}] 보드가 새롭게 추가되었습니다.`);
         }
 
@@ -1036,106 +1121,17 @@
                     item.stage = trimmed;
                 }
             });
+            const sIdx = stageOrder.indexOf(oldStage);
+            if (sIdx > -1) stageOrder[sIdx] = trimmed;
+
             saveToLocalStorage();
             renderPrep();
+            syncToGoogleSheetsDebounced();
             showToast(`보드 이름이 [${trimmed}](으)로 변경되었습니다.`);
         }
 
         let draggedIndex = null;
         let draggedType = null;
-        let draggedBoardIndex = null;
-
-        function getPrepStageOrder() {
-            const stageOrder = [];
-            if (dbData.prep && Array.isArray(dbData.prep)) {
-                dbData.prep.forEach(item => {
-                    const s = item.stage || "기타";
-                    if (!stageOrder.includes(s)) stageOrder.push(s);
-                });
-            }
-            const defaultStages = ["세션 준비", "모객 준비", "사전 홍보", "진행 준비"];
-            defaultStages.forEach(s => {
-                if (!stageOrder.includes(s)) stageOrder.push(s);
-            });
-            return stageOrder;
-        }
-
-        function handleBoardDragStart(e, stageIdx) {
-            if (!isEditMode) return;
-            if (e.target.closest('[contenteditable="true"]') || e.target.closest('input') || e.target.closest('button') || e.target.closest('select')) {
-                e.preventDefault();
-                return;
-            }
-            draggedBoardIndex = stageIdx;
-            e.dataTransfer.effectAllowed = 'move';
-            const board = e.target.closest('.prep-board-card');
-            if (board) board.classList.add('dragging');
-        }
-
-        function handleBoardDragOver(e, stageIdx) {
-            if (!isEditMode || draggedBoardIndex === null) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            const board = e.target.closest('.prep-board-card');
-            if (!board) return;
-            const rect = board.getBoundingClientRect();
-            const offset = e.clientY - rect.top;
-            
-            board.classList.remove('drag-over-top', 'drag-over-bottom');
-            if (offset < rect.height / 2) {
-                board.classList.add('drag-over-top');
-            } else {
-                board.classList.add('drag-over-bottom');
-            }
-        }
-
-        function handleBoardDrop(e, targetStageIdx) {
-            if (!isEditMode || draggedBoardIndex === null) return;
-            e.preventDefault();
-            const board = e.target.closest('.prep-board-card');
-            if (!board) return;
-            const rect = board.getBoundingClientRect();
-            const offset = e.clientY - rect.top;
-            board.classList.remove('drag-over-top', 'drag-over-bottom');
-
-            let newIdx = targetStageIdx;
-            if (offset >= rect.height / 2 && draggedBoardIndex < targetStageIdx) {
-                newIdx = targetStageIdx;
-            } else if (offset >= rect.height / 2 && draggedBoardIndex > targetStageIdx) {
-                newIdx = targetStageIdx + 1;
-            }
-
-            if (draggedBoardIndex !== newIdx) {
-                const stageOrder = getPrepStageOrder();
-                const movedStage = stageOrder.splice(draggedBoardIndex, 1)[0];
-                const insertAt = draggedBoardIndex < newIdx ? newIdx - 1 : newIdx;
-                stageOrder.splice(insertAt, 0, movedStage);
-
-                let newPrep = [];
-                stageOrder.forEach(stg => {
-                    const items = dbData.prep.filter(item => (item.stage || "기타") === stg);
-                    newPrep.push(...items);
-                });
-                dbData.prep.forEach(item => {
-                    if (!stageOrder.includes(item.stage || "기타")) {
-                        newPrep.push(item);
-                    }
-                });
-                dbData.prep = newPrep;
-
-                saveToLocalStorage();
-                renderPrep();
-                showToast("보드 순서가 변경되었습니다.");
-            }
-            draggedBoardIndex = null;
-        }
-
-        function handleBoardDragEnd(e) {
-            document.querySelectorAll('.prep-board-card').forEach(b => {
-                b.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
-            });
-            draggedBoardIndex = null;
-        }
 
         function handleDragStart(e, index, type) {
             const editable = (type === 'budget') ? (budgetAccessMode === 'edit') : isEditMode;
@@ -1143,8 +1139,8 @@
             draggedIndex = index;
             draggedType = type;
             e.dataTransfer.effectAllowed = 'move';
-            const row = e.target.closest('tr');
-            if (row) row.classList.add('dragging');
+            const el = e.target.closest('tr, .board-card');
+            if (el) el.classList.add('dragging');
         }
 
         function handleDragOver(e, index, type) {
@@ -1152,23 +1148,23 @@
             if (!editable || draggedIndex === null || draggedType !== type) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
-            const row = e.target.closest('tr');
-            if (!row) return;
-            const rect = row.getBoundingClientRect();
+            const el = e.target.closest('tr, .board-card');
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
             const offset = e.clientY - rect.top;
             
-            row.classList.remove('drag-over-top', 'drag-over-bottom');
+            el.classList.remove('drag-over-top', 'drag-over-bottom');
             if (offset < rect.height / 2) {
-                row.classList.add('drag-over-top');
+                el.classList.add('drag-over-top');
             } else {
-                row.classList.add('drag-over-bottom');
+                el.classList.add('drag-over-bottom');
             }
         }
 
         function handleDragLeave(e) {
-            const elem = e.target.closest('tr') || e.target.closest('.prep-board-card');
-            if (elem) {
-                elem.classList.remove('drag-over-top', 'drag-over-bottom');
+            const el = e.target.closest('tr, .board-card');
+            if (el) {
+                el.classList.remove('drag-over-top', 'drag-over-bottom');
             }
         }
 
@@ -1176,11 +1172,11 @@
             const editable = (type === 'budget') ? (budgetAccessMode === 'edit') : isEditMode;
             if (!editable || draggedIndex === null || draggedType !== type) return;
             e.preventDefault();
-            const row = e.target.closest('tr');
-            if (!row) return;
-            const rect = row.getBoundingClientRect();
+            const el = e.target.closest('tr, .board-card');
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
             const offset = e.clientY - rect.top;
-            row.classList.remove('drag-over-top', 'drag-over-bottom');
+            el.classList.remove('drag-over-top', 'drag-over-bottom');
 
             let newIndex = targetIndex;
             if (offset >= rect.height / 2 && draggedIndex < targetIndex) {
@@ -1189,7 +1185,16 @@
                 newIndex = targetIndex + 1;
             }
 
-            if (draggedIndex !== newIndex && dbData[type]) {
+            if (type === 'prep_board') {
+                if (draggedIndex !== newIndex) {
+                    const movedStage = stageOrder.splice(draggedIndex, 1)[0];
+                    const insertAt = draggedIndex < newIndex ? newIndex - 1 : newIndex;
+                    stageOrder.splice(insertAt, 0, movedStage);
+                    saveToLocalStorage();
+                    renderPrep();
+                    showToast("보드 순서가 변경되었습니다.");
+                }
+            } else if (draggedIndex !== newIndex && dbData[type]) {
                 const movedItem = dbData[type].splice(draggedIndex, 1)[0];
                 const insertAt = draggedIndex < newIndex ? newIndex - 1 : newIndex;
                 dbData[type].splice(insertAt, 0, movedItem);
@@ -1207,12 +1212,13 @@
                     renderAll();
                     showToast("항목 순서가 변경되었습니다.");
                 }
+                syncToGoogleSheetsDebounced();
             }
             draggedIndex = null;
         }
 
         function handleDragEnd(e, type) {
-            document.querySelectorAll('tbody tr').forEach(r => {
+            document.querySelectorAll('tbody tr, .board-card').forEach(r => {
                 r.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
             });
             draggedIndex = null;
@@ -1276,16 +1282,22 @@
             const editableAttr = isEditMode ? 'contenteditable="true"' : 'contenteditable="false"';
 
             const defaultStages = ["세션 준비", "모객 준비", "사전 홍보", "진행 준비"];
-            const stageOrder = getPrepStageOrder();
-            const groups = {};
-
-            stageOrder.forEach(s => {
-                groups[s] = [];
+            const allStages = Array.from(new Set([...defaultStages, ...(dbData.prep || []).map(p => p.stage || "기타")]));
+            
+            stageOrder = stageOrder.filter(s => allStages.includes(s));
+            allStages.forEach(s => {
+                if (!stageOrder.includes(s)) stageOrder.push(s);
             });
+
+            const groups = {};
+            stageOrder.forEach(s => { groups[s] = []; });
 
             dbData.prep.forEach((item, index) => {
                 const stageName = item.stage || "기타";
-                if (!groups[stageName]) groups[stageName] = [];
+                if (!groups[stageName]) {
+                    groups[stageName] = [];
+                    stageOrder.push(stageName);
+                }
                 groups[stageName].push({ ...item, originalIndex: index });
             });
 
@@ -1296,17 +1308,19 @@
                 const items = groups[stage] || [];
                 if (items.length === 0 && !defaultStages.includes(stage)) return;
                 const iconName = stageIcons[stage] || "folder";
+
                 html += `
-                    <div draggable="${isEditMode}"
-                        ondragstart="handleBoardDragStart(event, ${stageIdx})"
-                        ondragover="handleBoardDragOver(event, ${stageIdx})"
-                        ondragleave="handleDragLeave(event)"
-                        ondrop="handleBoardDrop(event, ${stageIdx})"
-                        ondragend="handleBoardDragEnd(event)"
-                        class="prep-board-card bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden transition">
+                    <div class="board-card bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden transition"
+                         draggable="${isEditMode}"
+                         ondragstart="handleDragStart(event, ${stageIdx}, 'prep_board')"
+                         ondragover="handleDragOver(event, ${stageIdx}, 'prep_board')"
+                         ondragleave="handleDragLeave(event)"
+                         ondrop="handleDrop(event, ${stageIdx}, 'prep_board')"
+                         ondragend="handleDragEnd(event, 'prep_board')">
+                        
                         <div class="bg-slate-100/80 px-5 py-3.5 border-b border-slate-200 flex justify-between items-center">
                             <div class="flex items-center gap-2">
-                                <div class="admin-only drag-handle inline-flex items-center justify-center p-1 rounded hover:bg-slate-200 text-slate-500" title="보드 순서 이동">
+                                <div class="admin-only drag-handle inline-flex items-center justify-center p-1 rounded hover:bg-slate-200 text-slate-500 cursor-grab">
                                     <i data-lucide="grip-vertical" class="w-4 h-4"></i>
                                 </div>
                                 <span class="p-1.5 bg-indigo-600 text-white rounded-lg flex items-center justify-center">
@@ -1685,9 +1699,10 @@
                 recalculateAgendaTimes();
                 renderAll();
                 closeJsonModal();
+                syncToGoogleSheetsDebounced();
                 showToast('새로운 JSON 데이터가 적용되었습니다.');
             } catch (e) {
-                showToast('유효하지 않은 JSON 형식입니다. 코드를 다시 확인해 주세요.');
+                showToast('유효하지 않은 JSON 형식입니다.');
             }
         }
 
@@ -1696,6 +1711,7 @@
             dbData = JSON.parse(JSON.stringify(initialData));
             recalculateAgendaTimes();
             renderAll();
+            syncToGoogleSheetsDebounced();
             showToast('초기 데이터로 복원되었습니다.');
         }
 
