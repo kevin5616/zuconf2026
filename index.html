@@ -1309,7 +1309,7 @@
             if (!container) return;
             const editableAttr = isEditMode ? 'contenteditable="true"' : 'contenteditable="false"';
 
-            const defaultStages = ["세션 준비", "모객 준비", "사전 홍보", "진행 준비"];
+            const defaultStages = ["세션 준비", "모객 준비", "사전 홍보"];
             const stageOrderList = [];
             
             dbData.prep.forEach(item => {
@@ -1378,7 +1378,6 @@
                                             <td colspan="7" class="p-4 text-center text-slate-400 text-xs">등록된 준비 항목이 없습니다. '+ 항목 추가'를 클릭하거나 여기에 항목을 끌어다 놓으세요.</td>
                                         </tr>` : items.map(item => {
                                         const i = item.originalIndex;
-                                        const isEdm = item.item && item.item.includes("eDM 발송");
                                         return `
                                             <tr class="hover:bg-slate-50/80 transition"
                                                 draggable="${isEditMode}"
@@ -1397,7 +1396,7 @@
                                                     <span ${editableAttr} onblur="updateCell('prep', ${i}, 'item', this.innerText)" class="px-1 py-0.5 rounded block whitespace-normal break-words">${item.item}</span>
                                                 </td>
                                                 <td class="p-3.5 text-slate-700 leading-relaxed align-top w-72 text-sm">
-                                                    <div ${editableAttr} onblur="updateCell('prep', ${i}, 'check', this.innerText)" class="px-1 py-0.5 rounded whitespace-pre-line ${isEdm ? 'bg-indigo-50/60 border border-indigo-100 p-2.5 rounded-xl font-medium text-indigo-950 shadow-2xs' : ''}">${item.check}</div>
+                                                    <div ${editableAttr} onblur="updateCell('prep', ${i}, 'check', this.innerText)" class="px-1 py-0.5 rounded whitespace-pre-line">${item.check}</div>
                                                 </td>
                                                 <td class="p-3.5 text-center font-medium text-slate-600 tabular-nums align-top text-sm">
                                                     <span ${editableAttr} onblur="updateCell('prep', ${i}, 'deadline', this.innerText)" class="px-1 py-0.5 rounded">${item.deadline}</span>
