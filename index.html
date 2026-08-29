@@ -10,6 +10,13 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
+        
+        /* 탭 전환 시 스크롤바 생성/제거로 인한 화면 좌우 흔들림 방지 */
+        html { 
+            overflow-y: scroll; 
+            scrollbar-gutter: stable; 
+        }
+
         body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; }
         
         /* 탭 버튼 세련된 스타일링 */
@@ -116,7 +123,7 @@
             </div>
         </div>
 
-        <div class="mb-8 p-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+        <div id="tab-navigation-container" class="sticky z-40 mb-8 p-2.5 bg-white/70 backdrop-blur-xl rounded-2xl shadow-[0_10px_40px_-10px_rgba(79,70,229,0.25)] border border-white ring-1 ring-indigo-100 overflow-x-auto transition-all">
             <nav class="flex justify-start sm:justify-center gap-2 min-w-max" aria-label="Tabs">
                 <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
                     <i data-lucide="layout-dashboard" class="w-4 h-4 sm:w-5 sm:h-5"></i> 종합 개요
@@ -694,6 +701,17 @@
             }
         }
 
+        function updateStickyTabPosition() {
+            const header = document.querySelector('header');
+            const tabNav = document.getElementById('tab-navigation-container');
+            if (header && tabNav) {
+                // 상단 헤더 높이만큼 탭 메뉴의 고정 위치를 자동으로 설정 (1px 보정)
+                tabNav.style.top = `${header.offsetHeight - 1}px`;
+            }
+        }
+
+        window.addEventListener('resize', updateStickyTabPosition);
+
         window.addEventListener('DOMContentLoaded', () => {
             ensureDaysOfWeek();
             calculateDDay();
@@ -701,6 +719,7 @@
             updateEditModeUI();
             renderAll();
             forceSyncFromGoogleSheets();
+            updateStickyTabPosition();
         });
 
         // 1. 구글 시트에서 데이터 가져오기 (GET)
