@@ -11,7 +11,27 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
         body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; }
-        .tab-active { border-bottom: 3px solid #4f46e5; color: #4f46e5; font-weight: 700; background-color: #f5f3ff; }
+        
+        /* 탭 버튼 세련된 스타일링 */
+        .tab-btn {
+            background-color: #f8fafc;
+            color: #64748b;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .tab-btn:hover {
+            background-color: #f1f5f9;
+            color: #0f172a;
+            border-color: #cbd5e1;
+        }
+        .tab-active { 
+            background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important; 
+            color: #ffffff !important; 
+            font-weight: 700; 
+            border-color: #4338ca !important;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35) !important;
+            transform: translateY(-1px);
+        }
         
         body.edit-mode [contenteditable="true"]:hover { outline: 2px dashed #a5b4fc; background-color: #f8fafc; cursor: text; }
         body.edit-mode [contenteditable="true"]:focus { outline: 2px solid #6366f1; background-color: #ffffff; border-radius: 4px; }
@@ -37,7 +57,7 @@
                     <div>
                         <div class="flex items-center gap-2">
                             <span class="bg-indigo-600 text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider text-white">ZUCONF 2026</span>
-                            <span class="text-xs text-slate-400">주최: (주)줌인테크 | 협찬: 오토데스크</span>
+                            <span class="text-xs text-slate-400">주최: (주)줌인테크 | 후원 : 오토데스크</span>
                         </div>
                         <h1 class="text-xl sm:text-2xl font-bold tracking-tight mt-1 flex items-center gap-2">
                             주민회의 2026 통합 관리 대시보드
@@ -96,25 +116,25 @@
             </div>
         </div>
 
-        <div class="border-b border-slate-200 mb-6 bg-white rounded-xl shadow-sm overflow-x-auto">
-            <nav class="flex justify-start sm:justify-center space-x-1 p-2 min-w-max" aria-label="Tabs">
-                <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium rounded-lg flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
-                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i> 종합 개요
+        <div class="mb-8 p-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+            <nav class="flex justify-start sm:justify-center gap-2 min-w-max" aria-label="Tabs">
+                <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4 sm:w-5 sm:h-5"></i> 종합 개요
                 </button>
-                <button onclick="switchTab('agenda')" id="tab-agenda" class="tab-btn px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
-                    <i data-lucide="calendar" class="w-4 h-4"></i> 아젠다
+                <button onclick="switchTab('agenda')" id="tab-agenda" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="calendar" class="w-4 h-4 sm:w-5 sm:h-5"></i> 아젠다
                 </button>
-                <button onclick="switchTab('prep')" id="tab-prep" class="tab-btn px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
-                    <i data-lucide="check-square" class="w-4 h-4"></i> 사전 준비
+                <button onclick="switchTab('prep')" id="tab-prep" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="check-square" class="w-4 h-4 sm:w-5 sm:h-5"></i> 사전 준비
                 </button>
-                <button onclick="switchTab('onsite')" id="tab-onsite" class="tab-btn px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
-                    <i data-lucide="users" class="w-4 h-4"></i> 당일 담당 및 준비
+                <button onclick="switchTab('onsite')" id="tab-onsite" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="users" class="w-4 h-4 sm:w-5 sm:h-5"></i> 당일 담당 및 준비
                 </button>
-                <button onclick="switchTab('post')" id="tab-post" class="tab-btn px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
-                    <i data-lucide="file-check" class="w-4 h-4"></i> 행사 후 진행
+                <button onclick="switchTab('post')" id="tab-post" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="file-check" class="w-4 h-4 sm:w-5 sm:h-5"></i> 행사 후 진행
                 </button>
-                <button onclick="switchTab('budget')" id="tab-budget" class="tab-btn px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
-                    <i data-lucide="pie-chart" class="w-4 h-4"></i> 예산 및 집행
+                <button onclick="switchTab('budget')" id="tab-budget" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="pie-chart" class="w-4 h-4 sm:w-5 sm:h-5"></i> 예산 및 집행
                 </button>
             </nav>
         </div>
@@ -477,13 +497,13 @@
                             <i data-lucide="plus" class="w-4 h-4"></i> 예산 항목 추가
                         </button>
                     </div>
-                    <table class="w-full text-left border-collapse min-w-[800px]">
+                    <table class="w-full text-left border-collapse min-w-[900px]">
                         <thead>
-                            <tr class="bg-slate-100 text-slate-700 border-b border-slate-200 text-xs">
+                            <tr class="bg-slate-100 text-slate-700 border-b border-slate-200 text-sm">
                                 <th id="th-budget-drag" class="hidden p-3.5 w-10 text-center font-semibold">이동</th>
                                 <th class="p-3.5 w-14 text-center font-semibold">No.</th>
-                                <th class="p-3.5 w-40 font-semibold">업체명 및 대상</th>
-                                <th class="p-3.5 w-36 font-semibold">세부 품목</th>
+                                <th class="p-3.5 w-52 font-semibold">업체명 및 대상</th>
+                                <th class="p-3.5 w-48 font-semibold">세부 품목</th>
                                 <th class="p-3.5 w-28 text-center font-semibold">단가(원)</th>
                                 <th class="p-3.5 w-20 text-center font-semibold">수량</th>
                                 <th class="p-3.5 w-32 text-right font-semibold">공급가액(원)</th>
@@ -492,7 +512,7 @@
                                 <th id="th-budget-manage" class="hidden p-3.5 w-16 text-center font-semibold">관리</th>
                             </tr>
                         </thead>
-                        <tbody id="budget-table-body" class="divide-y divide-slate-200 text-xs">
+                        <tbody id="budget-table-body" class="divide-y divide-slate-200 text-sm">
                         </tbody>
                     </table>
                 </div>
@@ -686,8 +706,13 @@
         // 1. 구글 시트에서 데이터 가져오기 (GET)
         async function forceSyncFromGoogleSheets() {
             if (!GOOGLE_SCRIPT_API_URL) return;
+            if (isSyncing || syncTimer) {
+                showToast("현재 수정된 데이터를 저장 중입니다. 잠시 후 다시 시도해 주세요.");
+                return;
+            }
             try {
-                const response = await fetch(GOOGLE_SCRIPT_API_URL);
+                const timestamp = new Date().getTime();
+                const response = await fetch(`${GOOGLE_SCRIPT_API_URL}?t=${timestamp}`);
                 const result = await response.json();
                 if (result.status === "success" && result.data && result.data.agenda && result.data.agenda.length > 0) {
                     dbData = result.data;
@@ -709,8 +734,8 @@
 
         function triggerSync() {
             saveToLocalStorage();
-            // 전체 편집 모드(isEditMode)이거나 예산 편집 모드(budgetAccessMode === 'edit')일 때만 구글 시트 저장 수행
-            if ((!isEditMode && budgetAccessMode !== 'edit') || !GOOGLE_SCRIPT_API_URL) return;
+            if (!isEditMode && budgetAccessMode !== 'edit') return;
+            if (!GOOGLE_SCRIPT_API_URL) return;
             if (syncTimer) clearTimeout(syncTimer);
             syncTimer = setTimeout(performSync, 600);
         }
@@ -784,7 +809,6 @@
         function switchTab(tabName) {
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.remove('tab-active');
-                btn.classList.add('text-slate-600');
             });
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.add('hidden');
@@ -794,7 +818,6 @@
             const activeContent = document.getElementById(`content-${tabName}`);
             if (activeBtn) {
                 activeBtn.classList.add('tab-active');
-                activeBtn.classList.remove('text-slate-600');
             }
             if (activeContent) activeContent.classList.remove('hidden');
 
@@ -1224,7 +1247,7 @@
                     const reorderedPrep = [];
                     uniqueStages.forEach(st => {
                         dbData.prep.forEach(item => {
-                            if ((item.stage || "기타") === st) reorderedPrep.push(item);
+                            if ((item.stage || "기타") === 아st) reorderedPrep.push(item);
                         });
                     });
                     dbData.prep = reorderedPrep;
@@ -1286,13 +1309,13 @@
                         `}
                     </td>
                     <td class="p-3.5 font-bold text-slate-900 align-middle w-60 text-sm">
-                        <span ${editableAttr} onblur="updateCell('agenda', ${i}, 'topic', this.innerText)" class="px-1 py-0.5 rounded block whitespace-normal break-words">${item.topic}</span>
+                        <div ${editableAttr} onblur="updateCell('agenda', ${i}, 'topic', this.innerText)" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words">${item.topic}</div>
                     </td>
                     <td class="p-3.5 text-slate-600 align-middle w-60 text-sm">
-                        <span ${editableAttr} onblur="updateCell('agenda', ${i}, 'content', this.innerText)" class="px-1 py-0.5 rounded block whitespace-normal break-words">${item.content}</span>
+                        <div ${editableAttr} onblur="updateCell('agenda', ${i}, 'content', this.innerText)" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words">${item.content}</div>
                     </td>
                     <td class="p-3.5 text-slate-800 font-medium align-middle text-sm">
-                        <span ${editableAttr} onblur="updateCell('agenda', ${i}, 'speaker', this.innerText)" class="px-1 py-0.5 rounded">${item.speaker}</span>
+                        <div ${editableAttr} onblur="updateCell('agenda', ${i}, 'speaker', this.innerText)" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words">${item.speaker}</div>
                     </td>
                     <td class="p-3.5 text-center align-middle">${getBadgeHtml(item.status, 'agenda', i)}</td>
                     <td class="admin-only p-3.5 text-center align-middle">
@@ -1576,52 +1599,52 @@
                         ondragleave="handleDragLeave(event)"
                         ondrop="handleDrop(event, ${i}, 'budget')"
                         ondragend="handleDragEnd(event, 'budget')"
-                        class="hover:bg-slate-50 transition text-xs">
+                        class="hover:bg-slate-50 transition text-sm">
 
                         ${isEdit ? `
-                            <td class="p-3 text-center text-slate-400 align-middle">
+                            <td class="p-3.5 text-center text-slate-400 align-middle">
                                 <div class="drag-handle inline-flex items-center justify-center p-1 rounded hover:bg-slate-200 text-slate-500">
                                     <i data-lucide="grip-vertical" class="w-4 h-4"></i>
                                 </div>
                             </td>
                         ` : ''}
 
-                        <td class="p-3 text-center font-bold text-slate-500 tabular-nums align-middle">${rowNo}</td>
-                        <td class="p-3 font-bold text-slate-800 align-middle">
-                            <span ${editableAttr} onblur="updateCell('budget', ${i}, 'item', this.innerText)" class="px-1 py-0.5 rounded">${item.item}</span>
+                        <td class="p-3.5 text-center font-bold text-slate-500 tabular-nums align-middle">${rowNo}</td>
+                        <td class="p-3.5 font-bold text-slate-800 align-middle">
+                            <div ${editableAttr} onblur="updateCell('budget', ${i}, 'item', this.innerText)" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words">${item.item}</div>
                         </td>
-                        <td class="p-3 text-slate-700 align-middle">
-                            <span ${editableAttr} onblur="updateCell('budget', ${i}, 'target', this.innerText)" class="px-1 py-0.5 rounded">${item.target || ''}</span>
+                        <td class="p-3.5 text-slate-700 align-middle">
+                            <div ${editableAttr} onblur="updateCell('budget', ${i}, 'target', this.innerText)" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words">${item.target || ''}</div>
                         </td>
-                        <td class="p-3 text-center align-middle">
+                        <td class="p-3.5 text-center align-middle">
                             ${isEdit 
-                                ? `<input type="text" value="${price.toLocaleString()}" oninput="let v=this.value.replace(/[^0-9]/g, ''); this.value=v?Number(v).toLocaleString():'0';" onchange="updateBudgetInput(${i}, 'price', this.value)" class="w-28 px-2 py-1 border border-slate-300 bg-white rounded-lg text-center font-sans font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs">`
+                                ? `<input type="text" value="${price.toLocaleString()}" oninput="let v=this.value.replace(/[^0-9]/g, ''); this.value=v?Number(v).toLocaleString():'0';" onchange="updateBudgetInput(${i}, 'price', this.value)" class="w-28 px-2 py-1 border border-slate-300 bg-white rounded-lg text-center font-sans font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">`
                                 : `<span class="font-sans font-semibold tabular-nums text-slate-700">${price.toLocaleString()}</span>`
                             }
                         </td>
-                        <td class="p-3 text-center align-middle">
+                        <td class="p-3.5 text-center align-middle">
                             ${isEdit 
-                                ? `<input type="text" value="${qty}" oninput="this.value=this.value.replace(/[^0-9]/g, '')" onchange="updateBudgetInput(${i}, 'qty', this.value)" class="w-16 px-2 py-1 border border-slate-300 bg-white rounded-lg text-center font-sans font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs">`
+                                ? `<input type="text" value="${qty}" oninput="this.value=this.value.replace(/[^0-9]/g, '')" onchange="updateBudgetInput(${i}, 'qty', this.value)" class="w-16 px-2 py-1 border border-slate-300 bg-white rounded-lg text-center font-sans font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">`
                                 : `<span class="font-sans font-semibold tabular-nums text-slate-700">${qty}</span>`
                             }
                         </td>
-                        <td class="p-3 text-right font-sans font-bold text-slate-900 tabular-nums align-middle">
+                        <td class="p-3.5 text-right font-sans font-bold text-slate-900 tabular-nums align-middle">
                             ${supply.toLocaleString()}원
                         </td>
-                        <td class="p-3 text-center align-middle">
+                        <td class="p-3.5 text-center align-middle">
                             ${isEdit ? `
-                                <select onchange="updateProof(${i}, this.value)" class="text-xs font-medium px-2 py-1 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <select onchange="updateProof(${i}, this.value)" class="text-sm font-medium px-2 py-1 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                                     ${proofOptions.map(opt => `<option value="${opt}" ${proof === opt ? 'selected' : ''}>${opt}</option>`).join('')}
                                 </select>
                             ` : `
                                 <span class="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-md border ${proofColors[proof] || proofColors['기타']}">${proof}</span>
                             `}
                         </td>
-                        <td class="p-3 text-slate-500 align-middle">
-                            <span ${editableAttr} onblur="updateCell('budget', ${i}, 'note', this.innerText)" class="px-1 py-0.5 rounded">${item.note || ''}</span>
+                        <td class="p-3.5 text-slate-500 align-middle">
+                            <div ${editableAttr} onblur="updateCell('budget', ${i}, 'note', this.innerText)" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words">${item.note || ''}</div>
                         </td>
                         ${isEdit ? `
-                            <td class="p-3 text-center align-middle">
+                            <td class="p-3.5 text-center align-middle">
                                 <button onclick="deleteRow('budget', ${i})" class="text-slate-400 hover:text-rose-600 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                             </td>
                         ` : ''}
