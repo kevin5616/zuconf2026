@@ -709,7 +709,8 @@
 
         function triggerSync() {
             saveToLocalStorage();
-            if (!isEditMode || !GOOGLE_SCRIPT_API_URL) return;
+            // 전체 편집 모드(isEditMode)이거나 예산 편집 모드(budgetAccessMode === 'edit')일 때만 구글 시트 저장 수행
+            if ((!isEditMode && budgetAccessMode !== 'edit') || !GOOGLE_SCRIPT_API_URL) return;
             if (syncTimer) clearTimeout(syncTimer);
             syncTimer = setTimeout(performSync, 600);
         }
