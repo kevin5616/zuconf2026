@@ -96,6 +96,11 @@
                 </div>
             </div>
         </div>
+        <div id="sync-banner" class="hidden bg-rose-50 border-t border-rose-200 text-rose-800 text-xs px-4 py-2.5 flex flex-wrap items-center justify-center gap-3">
+            <span id="sync-banner-msg" class="font-medium"></span>
+            <button onclick="resolveReload()" class="bg-white border border-rose-300 text-rose-700 font-bold px-3 py-1 rounded-lg hover:bg-rose-100">최신 내용 불러오기</button>
+            <button id="sync-banner-overwrite" onclick="resolveOverwrite()" class="bg-rose-600 hover:bg-rose-500 text-white font-bold px-3 py-1 rounded-lg">내 내용으로 덮어쓰기</button>
+        </div>
     </header>
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full">
@@ -110,6 +115,7 @@
                     <span id="mode-status-badge" class="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-200">
                         <i data-lucide="eye" class="w-3.5 h-3.5 text-slate-500"></i> 읽기 전용 보기 모드
                     </span>
+                    <span id="sync-status" class="text-[11px] font-bold px-2 py-1 rounded-full border whitespace-nowrap bg-slate-100 text-slate-500 border-slate-200">시트 연결 확인 중…</span>
                     <span class="text-slate-500 hidden sm:inline" id="mode-guide-text">수정 및 항목 추가는 상단 '관리자 모드' 로그인이 필요합니다.</span>
                 </div>
                 <div class="flex items-center gap-2 w-full sm:w-auto shrink-0">
@@ -723,67 +729,239 @@
             updateStickyTabPosition();
         });
 
+        // ================================================================
+        // 구글 시트 연동 (v23: 버전 기반 충돌 감지 / 저장 상태 표시)
+        // ================================================================
+        const API_TOKEN = "";            // Apps Script 에서 API_TOKEN 속성을 켠 경우에만 같은 값을 입력
+        let dataVersion = null;          // 마지막으로 시트에서 받은(또는 내가 저장한) 데이터 버전
+        let syncReady = false;           // 시트에서 최초 1회 정상 수신했는지
+        let legacySheet = false;         // 시트 스크립트가 버전을 지원하지 않는 구버전인 경우(충돌 검사 생략)
+        let conflictMode = false;        // 충돌 발생 시 자동 저장 중단
+        let conflictServerVersion = null;
+        let isSyncing = false;
+        let pendingSync = false;
+        let syncTimer = null;
+        let dirty = false;               // 아직 시트에 저장되지 않은 수정이 있는지
+
+        function apiUrl(params) {
+            const q = new URLSearchParams(params || {});
+            if (API_TOKEN) q.set('token', API_TOKEN);
+            q.set('t', Date.now());
+            return `${GOOGLE_SCRIPT_API_URL}?${q.toString()}`;
+        }
+
+        function setSyncStatus(state) {
+            const el = document.getElementById('sync-status');
+            if (!el) return;
+            const map = {
+                connecting: ['시트 연결 확인 중…', 'bg-slate-100 text-slate-500 border-slate-200'],
+                ok:         ['● 시트와 동기화됨', 'bg-emerald-50 text-emerald-700 border-emerald-200'],
+                saving:     ['저장 중…', 'bg-blue-50 text-blue-700 border-blue-200'],
+                pending:    ['저장 대기 중…', 'bg-amber-50 text-amber-700 border-amber-200'],
+                conflict:   ['충돌 — 확인 필요', 'bg-rose-50 text-rose-700 border-rose-200'],
+                error:      ['저장 실패 — 재시도 중', 'bg-rose-50 text-rose-700 border-rose-200'],
+                offline:    ['시트 미연결 (저장 안 됨)', 'bg-amber-50 text-amber-700 border-amber-200']
+            };
+            const [text, cls] = map[state] || map.connecting;
+            el.textContent = text;
+            el.className = `text-[11px] font-bold px-2 py-1 rounded-full border whitespace-nowrap ${cls}`;
+        }
+
+        function showSyncBanner(kind) {
+            const banner = document.getElementById('sync-banner');
+            const msg = document.getElementById('sync-banner-msg');
+            const overwriteBtn = document.getElementById('sync-banner-overwrite');
+            if (!banner) return;
+            if (kind === 'conflict') {
+                msg.textContent = "다른 사람이 먼저 수정했거나 시트가 직접 수정되어 저장하지 못했습니다. 내 수정 내용은 이 브라우저에 임시 보관됩니다.";
+                overwriteBtn.classList.remove('hidden');
+            } else {
+                msg.textContent = "다른 사람이 내용을 수정했습니다. 최신 내용을 불러오세요.";
+                overwriteBtn.classList.add('hidden');
+            }
+            banner.classList.remove('hidden');
+            updateStickyTabPosition();
+        }
+
+        function hideSyncBanner() {
+            const banner = document.getElementById('sync-banner');
+            if (banner) banner.classList.add('hidden');
+            updateStickyTabPosition();
+        }
+
+        // 저장되지 않은 내 수정 내용을 이 브라우저에 임시 보관 (최신 내용을 불러오기 전)
+        function backupLocalEdits() {
+            try {
+                localStorage.setItem('zuconf_2026_conflict_backup', JSON.stringify({ savedAt: new Date().toISOString(), data: dbData }));
+            } catch (e) { /* 무시 */ }
+        }
+
         // 1. 구글 시트에서 데이터 가져오기 (GET)
-        async function forceSyncFromGoogleSheets() {
-            if (!GOOGLE_SCRIPT_API_URL) return;
-            if (isSyncing || syncTimer) {
+        async function forceSyncFromGoogleSheets(opts = {}) {
+            if (!GOOGLE_SCRIPT_API_URL) return false;
+            const force = opts.force || conflictMode;
+            if (!force && (isSyncing || syncTimer)) {
                 showToast("현재 수정된 데이터를 저장 중입니다. 잠시 후 다시 시도해 주세요.");
-                return;
+                return false;
             }
             try {
-                const timestamp = new Date().getTime();
-                const response = await fetch(`${GOOGLE_SCRIPT_API_URL}?t=${timestamp}`);
+                const response = await fetch(apiUrl());
                 const result = await response.json();
-                if (result.status === "success" && result.data && result.data.agenda && result.data.agenda.length > 0) {
+                if (result.status !== "success") throw new Error(result.message || "응답 오류");
+
+                const hasData = result.data && result.data.agenda && result.data.agenda.length > 0;
+                if (hasData) {
+                    if (dirty) backupLocalEdits();
+                    if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+                    pendingSync = false;
                     dbData = result.data;
                     ensureDaysOfWeek();
                     recalculateAgendaTimes();
                     saveToLocalStorage();
                     renderAll();
-                    showToast("구글 시트의 최신 데이터로 동기화되었습니다.");
+                    filterDashboard();
                 }
+                if (result.version) {
+                    dataVersion = String(result.version);
+                    legacySheet = false;
+                } else {
+                    dataVersion = null;
+                    legacySheet = true;
+                }
+                syncReady = true;
+                conflictMode = false;
+                dirty = false;
+                hideSyncBanner();
+                setSyncStatus('ok');
+                if (hasData && !opts.silent) showToast("구글 시트의 최신 데이터로 동기화되었습니다.");
+                return true;
             } catch (e) {
                 console.warn("구글 시트 로드 실패, 로컬 데이터를 유지합니다.", e);
+                if (!syncReady) setSyncStatus('offline');
+                return false;
             }
         }
 
         // 2. 관리자 모드 수정 시 구글 시트로 자동 전송 (POST)
-        let isSyncing = false;
-        let pendingSync = false;
-        let syncTimer = null;
-
         function triggerSync() {
             saveToLocalStorage();
             if (!isEditMode && budgetAccessMode !== 'edit') return;
             if (!GOOGLE_SCRIPT_API_URL) return;
+            dirty = true;
+            if (conflictMode) { setSyncStatus('conflict'); return; }
+            if (!syncReady) {
+                setSyncStatus('offline');
+                showToast("시트와 아직 연결되지 않아 저장하지 못했습니다. [동기화]를 눌러 연결을 확인해 주세요.");
+                return;
+            }
+            setSyncStatus('pending');
             if (syncTimer) clearTimeout(syncTimer);
             syncTimer = setTimeout(performSync, 600);
         }
 
         async function performSync() {
+            syncTimer = null;
+            if (conflictMode) return;
             if (isSyncing) {
                 pendingSync = true;
                 return;
             }
             isSyncing = true;
+            setSyncStatus('saving');
             try {
-                await fetch(GOOGLE_SCRIPT_API_URL, {
+                const payload = Object.assign({}, dbData);
+                if (!legacySheet) payload.baseVersion = dataVersion;
+                if (API_TOKEN) payload.token = API_TOKEN;
+
+                // text/plain 으로 보내면 CORS 사전 요청 없이 응답을 읽을 수 있음
+                const response = await fetch(GOOGLE_SCRIPT_API_URL, {
                     method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(dbData)
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify(payload)
                 });
-                showToast("구글 시트에 실시간 자동 저장되었습니다.");
+                const result = await response.json();
+
+                if (result.status === "success") {
+                    if (result.version) dataVersion = String(result.version);
+                    if (!pendingSync && !syncTimer) {
+                        dirty = false;
+                        setSyncStatus('ok');
+                    }
+                    showToast("구글 시트에 자동 저장되었습니다.");
+                } else if (result.status === "conflict") {
+                    enterConflict(result.version);
+                } else {
+                    throw new Error(result.message || "저장 오류");
+                }
             } catch (e) {
                 console.error("구글 시트 저장 오류:", e);
+                setSyncStatus('error');
+                showToast("구글 시트 저장에 실패했습니다. 잠시 후 자동으로 다시 시도합니다.");
+                setTimeout(() => {
+                    if (dirty && !conflictMode && !syncTimer && !isSyncing) performSync();
+                }, 10000);
             } finally {
                 isSyncing = false;
-                if (pendingSync) {
+                if (pendingSync && !conflictMode) {
                     pendingSync = false;
                     setTimeout(performSync, 300);
+                } else {
+                    pendingSync = false;
                 }
             }
         }
+
+        function enterConflict(serverVersion) {
+            conflictMode = true;
+            conflictServerVersion = serverVersion ? String(serverVersion) : null;
+            if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+            pendingSync = false;
+            backupLocalEdits();
+            setSyncStatus('conflict');
+            showSyncBanner('conflict');
+        }
+
+        // 충돌/변경 알림 배너: 최신 내용 불러오기 (내 미저장 수정은 임시 보관 후 버림)
+        async function resolveReload() {
+            if (dirty) backupLocalEdits();
+            await forceSyncFromGoogleSheets({ force: true });
+        }
+
+        // 충돌 배너: 내 내용으로 시트를 덮어쓰기
+        function resolveOverwrite() {
+            if (!confirm("시트의 최신 내용(다른 사람이 수정한 내용 포함)을 지우고, 지금 화면의 내용으로 덮어씁니다. 계속할까요?")) return;
+            dataVersion = conflictServerVersion || dataVersion;
+            conflictMode = false;
+            hideSyncBanner();
+            performSync();
+        }
+
+        // 3. 다른 사람의 수정 감지 (30초마다 + 탭으로 돌아올 때 버전만 확인)
+        async function pollVersion() {
+            if (!syncReady || legacySheet || isSyncing || syncTimer || conflictMode || document.hidden) return;
+            try {
+                const response = await fetch(apiUrl({ type: 'version' }));
+                const result = await response.json();
+                if (result.status !== "success") return;
+                if (!result.version) { legacySheet = true; return; }
+                if (String(result.version) === dataVersion) return;
+                if (isEditMode || budgetAccessMode === 'edit') {
+                    if (!dirty) showSyncBanner('stale');
+                } else {
+                    const ok = await forceSyncFromGoogleSheets({ silent: true });
+                    if (ok) showToast("다른 사람이 수정한 최신 내용으로 갱신되었습니다.");
+                }
+            } catch (e) { /* 일시적인 네트워크 오류는 무시 */ }
+        }
+        setInterval(pollVersion, 30000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) pollVersion(); });
+
+        window.addEventListener('beforeunload', (e) => {
+            if (dirty || syncTimer || isSyncing) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
 
         function calculateDDay() {
             const eventDate = new Date('2026-10-22T00:00:00');
