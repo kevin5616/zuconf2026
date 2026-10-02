@@ -41,6 +41,23 @@
             transform: translateY(-1px);
         }
         
+        /* 사전등록 현황 탭: 옅은 파스텔 레드 계열 */
+        #tab-registration {
+            background-color: #ffe4e6;
+            color: #be123c;
+            border-color: #fecdd3;
+        }
+        #tab-registration:hover {
+            background-color: #fecdd3;
+            color: #9f1239;
+            border-color: #fda4af;
+        }
+        #tab-registration.tab-active {
+            background: linear-gradient(135deg, #fb7185 0%, #e11d48 100%) !important;
+            border-color: #e11d48 !important;
+            box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3) !important;
+        }
+
         body.edit-mode [contenteditable="true"]:hover { outline: 2px dashed #a5b4fc; background-color: #f8fafc; cursor: text; }
         body.edit-mode [contenteditable="true"]:focus { outline: 2px solid #6366f1; background-color: #ffffff; border-radius: 4px; }
         
@@ -135,14 +152,14 @@
                 <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn tab-active px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
                     <i data-lucide="layout-dashboard" class="w-4 h-4 sm:w-5 sm:h-5"></i> 종합 개요
                 </button>
+                <button onclick="switchTab('registration')" id="tab-registration" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="user-plus" class="w-4 h-4 sm:w-5 sm:h-5"></i> 사전등록 현황
+                </button>
                 <button onclick="switchTab('agenda')" id="tab-agenda" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
                     <i data-lucide="calendar" class="w-4 h-4 sm:w-5 sm:h-5"></i> 아젠다
                 </button>
                 <button onclick="switchTab('prep')" id="tab-prep" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
                     <i data-lucide="check-square" class="w-4 h-4 sm:w-5 sm:h-5"></i> 사전 준비
-                </button>
-                <button onclick="switchTab('registration')" id="tab-registration" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
-                    <i data-lucide="user-plus" class="w-4 h-4 sm:w-5 sm:h-5"></i> 사전등록 현황
                 </button>
                 <button onclick="switchTab('onsite')" id="tab-onsite" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
                     <i data-lucide="users" class="w-4 h-4 sm:w-5 sm:h-5"></i> 당일 담당 및 준비
@@ -984,25 +1001,23 @@
             }
         });
 
-        function calculateDDay() {
-            const eventDate = new Date('2026-10-22T00:00:00');
+        // 행사일까지 남은 날짜 (오늘 제외: 내일이 행사면 1, 오늘이 행사면 0, 지났으면 음수)
+        // 접속한 기기의 오늘 날짜 기준. 모든 D-Day 표시가 이 함수를 함께 사용
+        function daysUntilEvent() {
             const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            
-            const diffTime = eventDate - today;
-            let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            if (diffDays > 0) diffDays += 1;
+            const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+            const [y, m, d] = '2026-10-22'.split('-').map(Number);
+            return Math.round((Date.UTC(y, m - 1, d) - today) / 86400000);
+        }
 
+        function ddayLabel(days) {
+            if (days === 0) return 'D-DAY';
+            return days > 0 ? `D-${days}` : `D+${Math.abs(days)}`;
+        }
+
+        function calculateDDay() {
             const ddayElem = document.getElementById('dday-tag');
-            if (ddayElem) {
-                if (diffDays === 0 || diffDays === 1) {
-                    ddayElem.innerText = "D-DAY";
-                } else if (diffDays > 1) {
-                    ddayElem.innerText = `D-${diffDays}`;
-                } else {
-                    ddayElem.innerText = `D+${Math.abs(diffDays)}`;
-                }
-            }
+            if (ddayElem) ddayElem.innerText = ddayLabel(daysUntilEvent());
         }
 
         function recalculateAgendaTimes() {
@@ -2186,8 +2201,7 @@
             const yestCnt = idxToday > 0 ? daily[idxToday - 1].count : 0;
             const recent = daily.slice(-7);
             const avg7 = recent.reduce((s, d) => s + d.count, 0) / recent.length;
-            let daysLeft = Math.round((ymdToUtc(EVENT_DATE_YMD) - ymdToUtc(r.today)) / 86400000);
-            if (daysLeft > 0) daysLeft += 1;   // 상단 D-Day 와 같은 계산(오늘 포함)
+            const daysLeft = daysUntilEvent();   // 상단 D-Day 와 같은 계산(오늘 제외)
             const remain = Math.max(0, REG_TARGET_MIN - total);
             const perDay = daysLeft > 0 ? (remain / daysLeft) : 0;
             const pctMin = Math.round(total / REG_TARGET_MIN * 100);
@@ -2199,7 +2213,7 @@
                     <div class="absolute -top-1 h-4 border-l-2 border-amber-500" style="left:${markerL}%" title="목표 ${REG_TARGET_MIN}명"></div>
                 </div>`;
 
-            const ddayText = daysLeft > 0 ? `D-${daysLeft}` : (daysLeft === 0 ? 'D-DAY' : `D+${Math.abs(daysLeft)}`);
+            const ddayText = ddayLabel(daysLeft);
             const needText = daysLeft > 0
                 ? (remain > 0 ? `${REG_TARGET_MIN}명까지 ${remain}명 · 하루 평균 ${perDay.toFixed(1)}명 필요` : `최소 목표(${REG_TARGET_MIN}명) 달성`)
                 : '행사 당일/종료';
