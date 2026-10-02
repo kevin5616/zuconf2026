@@ -141,6 +141,9 @@
                 <button onclick="switchTab('prep')" id="tab-prep" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
                     <i data-lucide="check-square" class="w-4 h-4 sm:w-5 sm:h-5"></i> 사전 준비
                 </button>
+                <button onclick="switchTab('registration')" id="tab-registration" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="user-plus" class="w-4 h-4 sm:w-5 sm:h-5"></i> 사전등록 현황
+                </button>
                 <button onclick="switchTab('onsite')" id="tab-onsite" class="tab-btn px-4 py-3 text-sm sm:text-base font-medium rounded-xl flex items-center gap-2 whitespace-nowrap">
                     <i data-lucide="users" class="w-4 h-4 sm:w-5 sm:h-5"></i> 당일 담당 및 준비
                 </button>
@@ -378,6 +381,24 @@
             </div>
             <div id="prep-boards-container" class="space-y-6">
             </div>
+        </section>
+
+        <!-- Registration Section -->
+        <section id="content-registration" class="tab-content hidden space-y-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">사전등록 현황</h2>
+                    <p class="text-xs text-slate-500">아임웹 사전등록 시트를 집계한 결과입니다. 같은 이메일은 1명으로 계산하며, 개인정보는 표시하지 않습니다.</p>
+                </div>
+                <div class="flex items-center gap-2 self-end sm:self-auto">
+                    <span id="reg-updated" class="text-xs text-slate-400"></span>
+                    <button onclick="loadRegistration(true)" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> 새로고침
+                    </button>
+                </div>
+            </div>
+            <div id="reg-message" class="hidden bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-4"></div>
+            <div id="reg-body" class="space-y-6"></div>
         </section>
 
         <!-- Onsite Section -->
@@ -1018,6 +1039,8 @@
                 activeBtn.classList.add('tab-active');
             }
             if (activeContent) activeContent.classList.remove('hidden');
+
+            if (tabName === 'registration') loadRegistration(false);
 
             if (tabName === 'budget') {
                 if (budgetAccessMode === 'locked') {
@@ -1993,6 +2016,230 @@
             rows.forEach(row => {
                 row.style.display = row.innerText.toLowerCase().includes(query) ? '' : 'none';
             });
+        }
+
+        // ================================================================
+        // 사전등록 현황 (Apps Script ?type=registration 집계 결과를 표시)
+        // ================================================================
+        const EVENT_DATE_YMD = '2026-10-22';
+        const REG_TARGET_MIN = 120;
+        const REG_TARGET_MAX = 150;
+        const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+        let regData = null, regLoadedAt = 0, regLoading = false;
+
+        function regEsc(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function ymdToUtc(ymd) {
+            const [y, m, d] = ymd.split('-').map(Number);
+            return Date.UTC(y, m - 1, d);
+        }
+
+        function fmtDay(ymd, short) {
+            const [y, m, d] = ymd.split('-').map(Number);
+            const wd = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+            const md = `${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}`;
+            return short ? md : `${md}(${wd})`;
+        }
+
+        function setRegMessage(text) {
+            const el = document.getElementById('reg-message');
+            if (!el) return;
+            if (text) { el.textContent = text; el.classList.remove('hidden'); }
+            else el.classList.add('hidden');
+        }
+
+        async function loadRegistration(force) {
+            if (regLoading) return;
+            if (!force && regData && Date.now() - regLoadedAt < 60000) return;
+            if (!GOOGLE_SCRIPT_API_URL) return;
+            regLoading = true;
+            if (!regData) {
+                document.getElementById('reg-body').innerHTML = '<div class="text-center text-sm text-slate-400 py-10">사전등록 데이터를 불러오는 중…</div>';
+            }
+            setRegMessage('');
+            try {
+                const response = await fetch(apiUrl({ type: 'registration' }));
+                const result = await response.json();
+                if (result.status !== 'success') throw new Error(result.message || '응답 오류');
+                if (!result.registration) {
+                    throw new Error('Apps Script 가 사전등록 집계를 지원하지 않는 이전 버전입니다. 최신 Code.gs 를 새 버전으로 배포해 주세요.');
+                }
+                regData = result.registration;
+                regLoadedAt = Date.now();
+                renderRegistration();
+            } catch (e) {
+                console.warn('사전등록 로드 실패', e);
+                setRegMessage('사전등록 현황을 불러오지 못했습니다. ' + (e.message || ''));
+                if (regData) renderRegistration();
+                else document.getElementById('reg-body').innerHTML = '';
+            } finally {
+                regLoading = false;
+            }
+        }
+
+        function regKpiCard(label, value, sub, extra) {
+            return `<div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <div class="text-xs font-semibold text-slate-500">${label}</div>
+                <div class="text-3xl font-black text-slate-900 tabular-nums mt-1">${value}</div>
+                <div class="text-xs text-slate-500 mt-1">${sub}</div>${extra || ''}
+            </div>`;
+        }
+
+        // x 축 공통: 일별 슬롯
+        function regChartFrame(daily, maxVal, ticks) {
+            const W = 700, H = 200, padL = 38, padR = 12, padT = 14, padB = 24;
+            const n = daily.length, slot = (W - padL - padR) / n;
+            const x = i => padL + slot * (i + 0.5);
+            const y = v => padT + (H - padT - padB) * (1 - v / maxVal);
+            let grid = '';
+            ticks.forEach(t => {
+                grid += `<line x1="${padL}" y1="${y(t)}" x2="${W - padR}" y2="${y(t)}" stroke="#e2e8f0" stroke-width="1"/>
+                         <text x="${padL - 6}" y="${y(t) + 3}" text-anchor="end" font-size="10" fill="#94a3b8">${t}</text>`;
+            });
+            const step = Math.max(1, Math.ceil(n / 10));
+            let labels = '';
+            daily.forEach((d, i) => {
+                if (i % step === 0 || i === n - 1) {
+                    labels += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="#64748b">${fmtDay(d.date, true)}</text>`;
+                }
+            });
+            return { W, H, padL, padR, padT, padB, slot, x, y, grid, labels };
+        }
+
+        function regNiceMax(v) {
+            const steps = [5, 10, 20, 25, 50, 100, 200, 300, 500];
+            const target = v * 1.1;
+            for (const s of steps) if (s * 4 >= target) return s * 4;
+            return Math.ceil(target / 100) * 100;
+        }
+
+        function regCumChart(daily) {
+            const last = daily[daily.length - 1].cum;
+            const maxVal = regNiceMax(Math.max(last, REG_TARGET_MAX));
+            const f = regChartFrame(daily, maxVal, [0, maxVal / 4, maxVal / 2, maxVal * 3 / 4, maxVal].map(Math.round));
+            const pts = daily.map((d, i) => `${f.x(i)},${f.y(d.cum)}`).join(' ');
+            const targetLine = (v, color, text) =>
+                `<line x1="${f.padL}" y1="${f.y(v)}" x2="${f.W - f.padR}" y2="${f.y(v)}" stroke="${color}" stroke-width="1.5" stroke-dasharray="5 4"/>
+                 <text x="${f.W - f.padR}" y="${f.y(v) - 4}" text-anchor="end" font-size="10" font-weight="700" fill="${color}">${text}</text>`;
+            const dots = daily.length <= 31 ? daily.map((d, i) => `<circle cx="${f.x(i)}" cy="${f.y(d.cum)}" r="3" fill="#4f46e5"/>`).join('') : '';
+            return `<svg viewBox="0 0 ${f.W} ${f.H}" class="w-full h-auto" role="img" aria-label="누적 등록 추이">
+                ${f.grid}${targetLine(REG_TARGET_MIN, '#d97706', '목표 ' + REG_TARGET_MIN)}${targetLine(REG_TARGET_MAX, '#e11d48', '목표 ' + REG_TARGET_MAX)}
+                <polyline points="${pts}" fill="none" stroke="#4f46e5" stroke-width="2.5" stroke-linejoin="round"/>${dots}${f.labels}
+            </svg>`;
+        }
+
+        function regBarChart(daily) {
+            const peak = Math.max(...daily.map(d => d.count), 1);
+            const top = Math.max(peak, 4);
+            const f = regChartFrame(daily, top, [0, Math.round(top / 2), top]);
+            const bw = Math.min(30, f.slot * 0.7);
+            const bars = daily.map((d, i) => {
+                const h = (f.H - f.padT - f.padB) * (d.count / top);
+                const label = daily.length <= 20 && d.count > 0
+                    ? `<text x="${f.x(i)}" y="${f.y(d.count) - 4}" text-anchor="middle" font-size="10" font-weight="700" fill="#4338ca">${d.count}</text>` : '';
+                return `<rect x="${f.x(i) - bw / 2}" y="${f.y(d.count)}" width="${bw}" height="${h}" rx="2" fill="#818cf8"><title>${fmtDay(d.date)} ${d.count}명</title></rect>${label}`;
+            }).join('');
+            return `<svg viewBox="0 0 ${f.W} ${f.H}" class="w-full h-auto" role="img" aria-label="일별 신규 등록">${f.grid}${bars}${f.labels}</svg>`;
+        }
+
+        function regDistCard(title, list, total) {
+            if (!list || !list.length) return '';
+            const TOP = 7;
+            let rows = list.slice(0, TOP);
+            const rest = list.slice(TOP).reduce((s, r) => s + r.count, 0);
+            if (rest > 0) rows = rows.concat([{ label: '기타', count: rest }]);
+            const body = rows.map(r => {
+                const pct = total ? Math.round(r.count / total * 100) : 0;
+                return `<div class="space-y-1">
+                    <div class="flex justify-between gap-3 text-xs">
+                        <span class="text-slate-700 truncate" title="${regEsc(r.label)}">${regEsc(r.label)}</span>
+                        <span class="text-slate-500 tabular-nums shrink-0">${r.count}명 · ${pct}%</span>
+                    </div>
+                    <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-indigo-500 rounded-full" style="width:${pct}%"></div></div>
+                </div>`;
+            }).join('');
+            return `<div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <h3 class="text-sm font-bold text-slate-700">${title}</h3>${body}</div>`;
+        }
+
+        function renderRegistration() {
+            const box = document.getElementById('reg-body');
+            const r = regData;
+            if (!box || !r) return;
+            const upd = document.getElementById('reg-updated');
+            if (upd) upd.textContent = '갱신 ' + new Date(regLoadedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+            if (!r.found) { box.innerHTML = ''; setRegMessage(r.message || '사전등록 시트를 찾을 수 없습니다.'); return; }
+            if (r.message) setRegMessage(r.message);
+            if (r.missing && r.missing.length) setRegMessage('시트에서 찾지 못한 열: ' + r.missing.join(', ') + ' — 해당 항목은 표시되지 않습니다.');
+            if (!r.daily || !r.daily.length) {
+                box.innerHTML = '<div class="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-400">아직 사전등록 데이터가 없습니다.</div>';
+                return;
+            }
+
+            const daily = r.daily, total = r.total;
+            const todayEntry = daily.find(d => d.date === r.today);
+            const todayCnt = todayEntry ? todayEntry.count : 0;
+            const idxToday = daily.findIndex(d => d.date === r.today);
+            const yestCnt = idxToday > 0 ? daily[idxToday - 1].count : 0;
+            const recent = daily.slice(-7);
+            const avg7 = recent.reduce((s, d) => s + d.count, 0) / recent.length;
+            let daysLeft = Math.round((ymdToUtc(EVENT_DATE_YMD) - ymdToUtc(r.today)) / 86400000);
+            if (daysLeft > 0) daysLeft += 1;   // 상단 D-Day 와 같은 계산(오늘 포함)
+            const remain = Math.max(0, REG_TARGET_MIN - total);
+            const perDay = daysLeft > 0 ? (remain / daysLeft) : 0;
+            const pctMin = Math.round(total / REG_TARGET_MIN * 100);
+            const barW = Math.min(100, total / REG_TARGET_MAX * 100);
+            const markerL = REG_TARGET_MIN / REG_TARGET_MAX * 100;
+
+            const progress = `<div class="relative h-2 bg-slate-100 rounded-full mt-3 overflow-visible">
+                    <div class="h-full bg-indigo-500 rounded-full" style="width:${barW}%"></div>
+                    <div class="absolute -top-1 h-4 border-l-2 border-amber-500" style="left:${markerL}%" title="목표 ${REG_TARGET_MIN}명"></div>
+                </div>`;
+
+            const ddayText = daysLeft > 0 ? `D-${daysLeft}` : (daysLeft === 0 ? 'D-DAY' : `D+${Math.abs(daysLeft)}`);
+            const needText = daysLeft > 0
+                ? (remain > 0 ? `${REG_TARGET_MIN}명까지 ${remain}명 · 하루 평균 ${perDay.toFixed(1)}명 필요` : `최소 목표(${REG_TARGET_MIN}명) 달성`)
+                : '행사 당일/종료';
+
+            const kpis = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                ${regKpiCard('총 등록 (중복 제외)', `${total}<span class="text-base font-bold text-slate-500">명</span>`,
+                    `목표 ${REG_TARGET_MIN}~${REG_TARGET_MAX}명 대비 ${pctMin}% · 신청 ${r.rawCount}건 중 중복 ${r.duplicates}건 · ${r.companies}개 회사/단체`, progress)}
+                ${regKpiCard('오늘 신규', `${todayCnt}<span class="text-base font-bold text-slate-500">명</span>`, `어제 ${yestCnt}명`)}
+                ${regKpiCard('최근 7일 일평균', `${avg7.toFixed(1)}<span class="text-base font-bold text-slate-500">명</span>`, `${fmtDay(recent[0].date)} ~ ${fmtDay(recent[recent.length - 1].date)}`)}
+                ${regKpiCard('행사까지', `<span class="text-amber-500">${ddayText}</span>`, needText)}
+            </div>`;
+
+            const charts = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                    <h3 class="text-sm font-bold text-slate-700">누적 등록 추이</h3>${regCumChart(daily)}
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                    <h3 class="text-sm font-bold text-slate-700">일별 신규 등록</h3>${regBarChart(daily)}
+                </div>
+            </div>`;
+
+            const dists = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                ${regDistCard('산업분야', r.industry, total)}${regDistCard('직무와 역할', r.role, total)}${regDistCard('인지경로', r.source, total)}
+            </div>`;
+
+            const rowsHtml = daily.slice().reverse().map(d => `<tr class="${d.count === 0 ? 'text-slate-400' : ''}">
+                <td class="p-2.5 tabular-nums">${fmtDay(d.date)}</td>
+                <td class="p-2.5 text-right tabular-nums font-semibold">${d.count}</td>
+                <td class="p-2.5 text-right tabular-nums">${d.cum}</td></tr>`).join('');
+            const table = `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 border-b border-slate-200"><h3 class="text-sm font-bold text-slate-700">일별 현황</h3></div>
+                <div class="max-h-80 overflow-y-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-100 text-slate-700 sticky top-0"><tr>
+                        <th class="p-2.5 font-semibold">날짜</th><th class="p-2.5 text-right font-semibold">신규(명)</th><th class="p-2.5 text-right font-semibold">누적(명)</th>
+                    </tr></thead>
+                    <tbody class="divide-y divide-slate-100">${rowsHtml}</tbody>
+                </table></div></div>`;
+
+            box.innerHTML = kpis + charts + dists + table;
         }
 
         function showToast(msg) {
