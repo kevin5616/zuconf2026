@@ -2245,16 +2245,58 @@
                 ${regDistCard('산업분야', r.industry, total)}${regDistCard('직무와 역할', r.role, total)}${regDistCard('인지경로', r.source, total)}
             </div>`;
 
-            const rowsHtml = daily.slice().reverse().map(d => `<tr class="${d.count === 0 ? 'text-slate-400' : ''}">
-                <td class="p-2.5 tabular-nums">${fmtDay(d.date)}</td>
-                <td class="p-2.5 text-right tabular-nums font-semibold">${d.count}</td>
-                <td class="p-2.5 text-right tabular-nums">${d.cum}</td></tr>`).join('');
+            // 일별 현황: 날짜 / D-Day / 신규(막대) / 누적 / 목표(최소) 달성률 / 전일 대비
+            const evUtc = ymdToUtc(EVENT_DATE_YMD);
+            const peakDay = Math.max(...daily.map(d => d.count), 1);
+            const best = daily.reduce((b, d) => (d.count > b.count ? d : b), daily[0]);
+            const activeDays = daily.filter(d => d.count > 0).length;
+            const avgAll = total / daily.length;
+            const chip = (label, val) => `<span class="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-full px-2.5 py-1 text-xs"><span class="text-slate-500">${label}</span><span class="font-bold text-slate-800 tabular-nums">${val}</span></span>`;
+            const summary = `<div class="flex flex-wrap gap-2 px-4 py-3 border-b border-slate-100">
+                ${chip('집계 기간', `${fmtDay(daily[0].date)} ~ ${fmtDay(daily[daily.length - 1].date)} (${daily.length}일)`)}
+                ${chip('일평균', `${avgAll.toFixed(1)}명`)}
+                ${chip('최다 등록일', best.count > 0 ? `${fmtDay(best.date)} · ${best.count}명` : '-')}
+                ${chip('등록 있는 날', `${activeDays}일`)}
+            </div>`;
+
+            const rowsHtml = daily.map((d, i) => {
+                const prev = i > 0 ? daily[i - 1].count : null;
+                const diff = prev === null ? null : d.count - prev;
+                const diffHtml = diff === null || diff === 0
+                    ? '<span class="text-slate-300">-</span>'
+                    : (diff > 0 ? `<span class="text-emerald-600 font-semibold">▲ ${diff}</span>` : `<span class="text-rose-500 font-semibold">▼ ${Math.abs(diff)}</span>`);
+                const dow = new Date(ymdToUtc(d.date)).getUTCDay();
+                const isToday = d.date === r.today;
+                const rowCls = isToday ? 'bg-indigo-50/70' : (dow === 0 || dow === 6 ? 'bg-slate-50/70' : '');
+                const goal = Math.round(d.cum / REG_TARGET_MIN * 100);
+                const barPct = d.count / peakDay * 100;
+                const left = Math.round((evUtc - ymdToUtc(d.date)) / 86400000);
+                return `<tr class="${rowCls} ${d.count === 0 ? 'text-slate-400' : ''}">
+                    <td class="p-2.5 tabular-nums whitespace-nowrap">${fmtDay(d.date)}${isToday ? ' <span class="ml-1 text-[10px] font-bold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full">오늘</span>' : ''}</td>
+                    <td class="p-2.5 text-center tabular-nums text-xs text-slate-500">${ddayLabel(left)}</td>
+                    <td class="p-2.5"><div class="flex items-center gap-2">
+                        <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-indigo-400 rounded-full" style="width:${barPct}%"></div></div>
+                        <span class="w-8 text-right tabular-nums font-semibold">${d.count}</span></div></td>
+                    <td class="p-2.5 text-right tabular-nums">${d.cum}</td>
+                    <td class="p-2.5"><div class="flex items-center gap-2">
+                        <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full ${goal >= 100 ? 'bg-emerald-400' : 'bg-amber-400'} rounded-full" style="width:${Math.min(100, goal)}%"></div></div>
+                        <span class="w-10 text-right tabular-nums text-xs">${goal}%</span></div></td>
+                    <td class="p-2.5 text-center tabular-nums text-xs">${diffHtml}</td></tr>`;
+            }).reverse().join('');
             const table = `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="p-4 border-b border-slate-200"><h3 class="text-sm font-bold text-slate-700">일별 현황</h3></div>
-                <div class="max-h-80 overflow-y-auto">
-                <table class="w-full text-sm text-left">
+                <div class="p-4 border-b border-slate-200 flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 class="text-sm font-bold text-slate-700">일별 현황</h3>
+                    <span class="text-[11px] text-slate-400">달성률은 최소 목표 ${REG_TARGET_MIN}명 대비 누적 기준 · 전일 대비는 신규 등록 증감</span>
+                </div>
+                ${summary}
+                <div class="max-h-96 overflow-y-auto overflow-x-auto">
+                <table class="w-full table-fixed text-sm text-left min-w-[680px]">
+                    <colgroup>
+                        <col style="width:19%"><col style="width:10%"><col style="width:24%"><col style="width:11%"><col style="width:24%"><col style="width:12%">
+                    </colgroup>
                     <thead class="bg-slate-100 text-slate-700 sticky top-0"><tr>
-                        <th class="p-2.5 font-semibold">날짜</th><th class="p-2.5 text-right font-semibold">신규(명)</th><th class="p-2.5 text-right font-semibold">누적(명)</th>
+                        <th class="p-2.5 font-semibold">날짜</th><th class="p-2.5 text-center font-semibold">D-Day</th><th class="p-2.5 font-semibold">신규(명)</th>
+                        <th class="p-2.5 text-right font-semibold">누적(명)</th><th class="p-2.5 font-semibold">목표 달성률</th><th class="p-2.5 text-center font-semibold">전일 대비</th>
                     </tr></thead>
                     <tbody class="divide-y divide-slate-100">${rowsHtml}</tbody>
                 </table></div></div>`;
