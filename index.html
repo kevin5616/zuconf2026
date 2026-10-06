@@ -2380,15 +2380,19 @@
             if (!body || !regList || !regList.list) return;
             const q = regListQuery.trim().toLowerCase();
             const today = localTodayYmd();
-            const rows = regList.list.filter(r => !q || [r.company, r.name, r.position, r.dept].join(' ').toLowerCase().includes(q));
+            // No. = 등록 순번(가장 먼저 등록한 사람이 1번). 목록은 최신순이라 맨 위가 가장 큰 번호이며, 검색해도 번호는 유지
+            const total = regList.list.length;
+            const rows = regList.list.map((r, i) => Object.assign({ no: total - i }, r))
+                .filter(r => !q || [r.company, r.name, r.position, r.dept].join(' ').toLowerCase().includes(q));
             if (count) count.textContent = q ? `${rows.length} / ${regList.total}명` : `${regList.total}명`;
             body.innerHTML = rows.length ? rows.map(r => `<tr>
+                <td class="p-2.5 text-center tabular-nums text-slate-400">${r.no}</td>
                 <td class="p-2.5 tabular-nums whitespace-nowrap">${fmtDay(r.date)}${r.date === today ? ' <span class="ml-1 text-[10px] font-bold bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full">NEW</span>' : ''}</td>
-                <td class="p-2.5">${regEsc(r.company || '-')}</td>
-                <td class="p-2.5 font-semibold">${regEsc(r.name || '-')}</td>
-                <td class="p-2.5">${regEsc(r.position || '-')}</td>
-                <td class="p-2.5">${regEsc(r.dept || '-')}</td></tr>`).join('')
-                : '<tr><td colspan="5" class="p-6 text-center text-slate-400">표시할 등록자가 없습니다.</td></tr>';
+                <td class="p-2.5 break-words">${regEsc(r.company || '-')}</td>
+                <td class="p-2.5 font-semibold break-words">${regEsc(r.name || '-')}</td>
+                <td class="p-2.5 break-words">${regEsc(r.position || '-')}</td>
+                <td class="p-2.5 break-words">${regEsc(r.dept || '-')}</td></tr>`).join('')
+                : '<tr><td colspan="6" class="p-6 text-center text-slate-400">표시할 등록자가 없습니다.</td></tr>';
         }
 
         function renderRegList() {
@@ -2422,10 +2426,14 @@
                     </div>
                 </div>
                 <div class="max-h-[32rem] overflow-y-auto overflow-x-auto">
-                    <table class="w-full text-sm text-left min-w-[560px]">
+                    <table class="w-full table-fixed text-sm text-left min-w-[760px]">
+                        <colgroup>
+                            <col style="width:6%"><col style="width:16%"><col style="width:25%">
+                            <col style="width:15%"><col style="width:18%"><col style="width:20%">
+                        </colgroup>
                         <thead class="bg-slate-100 text-slate-700 sticky top-0"><tr>
-                            <th class="p-2.5 font-semibold w-36">등록일자</th><th class="p-2.5 font-semibold">회사 또는 단체명</th>
-                            <th class="p-2.5 font-semibold w-28">이름</th><th class="p-2.5 font-semibold w-32">직급 또는 직위</th><th class="p-2.5 font-semibold w-40">부서명</th>
+                            <th class="p-2.5 font-semibold text-center">No.</th><th class="p-2.5 font-semibold">등록일자</th><th class="p-2.5 font-semibold">회사 또는 단체명</th>
+                            <th class="p-2.5 font-semibold">이름</th><th class="p-2.5 font-semibold">직급 또는 직위</th><th class="p-2.5 font-semibold">부서명</th>
                         </tr></thead>
                         <tbody id="reg-list-body" class="divide-y divide-slate-100"></tbody>
                     </table>
