@@ -405,7 +405,7 @@
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                 <div>
                     <h2 class="text-base font-bold text-slate-900">사전등록 현황</h2>
-                    <p class="text-xs text-slate-500">아임웹 사전등록 시트를 집계한 결과입니다. 같은 이메일은 1명으로 계산하며, 개인정보는 표시하지 않습니다.</p>
+                    <p class="text-xs text-slate-500">아임웹 사전등록 시트를 집계한 결과입니다. 같은 이메일은 1명으로 계산합니다. 등록자 명단은 비밀번호를 입력한 경우에만 표시됩니다.</p>
                 </div>
                 <div class="flex items-center gap-2 self-end sm:self-auto">
                     <span id="reg-updated" class="text-xs text-slate-400"></span>
@@ -416,6 +416,7 @@
             </div>
             <div id="reg-message" class="hidden bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-4"></div>
             <div id="reg-body" class="space-y-6"></div>
+            <div id="reg-list-card"></div>
         </section>
 
         <!-- Onsite Section -->
@@ -1055,7 +1056,11 @@
             }
             if (activeContent) activeContent.classList.remove('hidden');
 
-            if (tabName === 'registration') loadRegistration(false);
+            if (tabName === 'registration') {
+                renderRegList();
+                loadRegistration(false);
+                if (regListPw && !regList) loadRegList(true);
+            }
 
             if (tabName === 'budget') {
                 if (budgetAccessMode === 'locked') {
@@ -2084,6 +2089,7 @@
                 regData = result.registration;
                 regLoadedAt = Date.now();
                 renderRegistration();
+                if (regListPw) loadRegList(true);
             } catch (e) {
                 console.warn('사전등록 로드 실패', e);
                 setRegMessage('사전등록 현황을 불러오지 못했습니다. ' + (e.message || ''));
@@ -2255,6 +2261,186 @@
 
             box.innerHTML = kpis + charts + dists + table;
         }
+
+        // ================================================================
+        // 등록자 명단 (비밀번호는 Apps Script 서버에서 확인 — HTML 에는 비밀번호가 없음)
+        // 표시 항목: 등록일자, 회사 또는 단체명, 이름, 직급 또는 직위, 부서명
+        // ================================================================
+        let regListPw = '';
+        try { regListPw = sessionStorage.getItem('zuconf_list_pw') || ''; } catch (e) { /* 무시 */ }
+        let regList = null, regListLoading = false, regListQuery = '', regListError = '', regIngesting = false;
+
+        async function apiPost(payload) {
+            const body = Object.assign({}, payload);
+            if (API_TOKEN) body.token = API_TOKEN;
+            const response = await fetch(GOOGLE_SCRIPT_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(body)
+            });
+            return response.json();
+        }
+
+        function localTodayYmd() {
+            const n = new Date();
+            return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+        }
+
+        async function loadRegList(silent) {
+            if (!regListPw || regListLoading || !GOOGLE_SCRIPT_API_URL) return;
+            regListLoading = true;
+            try {
+                const result = await apiPost({ action: 'registrationList', password: regListPw });
+                if (result.status !== 'success') {
+                    if (result.code === 'wrong_password' || result.code === 'locked' || result.code === 'not_configured') {
+                        regListPw = ''; regList = null;
+                        try { sessionStorage.removeItem('zuconf_list_pw'); } catch (e) { /* 무시 */ }
+                    }
+                    throw new Error(result.message || '명단을 불러오지 못했습니다.');
+                }
+                regList = result.list;
+                regListError = (regList && regList.message) ? regList.message : '';
+            } catch (e) {
+                regListError = e.message || '명단을 불러오지 못했습니다.';
+                if (!silent) showToast(regListError);
+            } finally {
+                regListLoading = false;
+                renderRegList();
+            }
+        }
+
+        function unlockRegList() {
+            const input = document.getElementById('reg-list-pw');
+            const pw = input ? input.value : '';
+            if (!pw) return;
+            regListPw = pw;
+            regListError = '';
+            try { sessionStorage.setItem('zuconf_list_pw', pw); } catch (e) { /* 무시 */ }
+            loadRegList(false);
+        }
+
+        function lockRegList() {
+            regListPw = ''; regList = null; regListQuery = ''; regListError = '';
+            try { sessionStorage.removeItem('zuconf_list_pw'); } catch (e) { /* 무시 */ }
+            renderRegList();
+        }
+
+        // 아임웹에서 내려받은 엑셀을 선택 → 브라우저가 읽어서 서버로 전달 → 새 등록자만 시트에 추가
+        function pickIngestFile() {
+            if (!regListPw || regIngesting) return;
+            const input = document.getElementById('reg-ingest-file');
+            if (input) { input.value = ''; input.click(); }
+        }
+
+        async function handleIngestFile(input) {
+            const file = input.files && input.files[0];
+            if (!file || !regListPw || regIngesting) return;
+            if (!/\.xlsx?$/i.test(file.name)) { showToast('엑셀(.xlsx) 파일을 선택해 주세요.'); return; }
+            if (!window.XLSX) { showToast('엑셀 처리 라이브러리를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.'); return; }
+            regIngesting = true; renderRegList();
+            try {
+                const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+                if (!aoa.length) throw new Error('빈 파일입니다.');
+                const headers = aoa[0].map(h => String(h));
+                const rows = aoa.slice(1)
+                    .filter(r => r.some(c => String(c).trim() !== ''))
+                    .map(r => r.map(c => (c === null || c === undefined) ? '' : String(c)));
+                if (!rows.length) throw new Error('등록 데이터가 없는 파일입니다.');
+                if (!confirm(`${file.name}\n${rows.length}행을 읽었습니다.\n새 등록자만 구글 시트에 추가합니다. 진행할까요?`)) return;
+
+                const result = await apiPost({ action: 'ingestRows', password: regListPw, fileName: file.name, headers, rows });
+                if (result.status !== 'success') {
+                    if (result.code === 'wrong_password' || result.code === 'locked' || result.code === 'not_configured') lockRegList();
+                    throw new Error(result.message || '반영하지 못했습니다.');
+                }
+                const r = result.ingest || {};
+                if (r.busy) showToast('다른 작업이 진행 중입니다. 잠시 후 다시 시도해 주세요.');
+                else if (r.errors && r.errors.length) showToast('엑셀 반영 중 오류: ' + r.errors[0]);
+                else showToast(`${r.rows}행 중 신규 ${r.added}명 반영 (중복 제외 ${r.duplicates}건)`);
+                regIngesting = false;
+                await loadRegistration(true);
+            } catch (e) {
+                showToast(e.message || '반영하지 못했습니다.');
+            } finally {
+                regIngesting = false;
+                renderRegList();
+            }
+        }
+
+        function setRegListQuery(v) {
+            regListQuery = v;
+            renderRegListRows();
+        }
+
+        function renderRegListRows() {
+            const body = document.getElementById('reg-list-body');
+            const count = document.getElementById('reg-list-count');
+            if (!body || !regList || !regList.list) return;
+            const q = regListQuery.trim().toLowerCase();
+            const today = localTodayYmd();
+            const rows = regList.list.filter(r => !q || [r.company, r.name, r.position, r.dept].join(' ').toLowerCase().includes(q));
+            if (count) count.textContent = q ? `${rows.length} / ${regList.total}명` : `${regList.total}명`;
+            body.innerHTML = rows.length ? rows.map(r => `<tr>
+                <td class="p-2.5 tabular-nums whitespace-nowrap">${fmtDay(r.date)}${r.date === today ? ' <span class="ml-1 text-[10px] font-bold bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full">NEW</span>' : ''}</td>
+                <td class="p-2.5">${regEsc(r.company || '-')}</td>
+                <td class="p-2.5 font-semibold">${regEsc(r.name || '-')}</td>
+                <td class="p-2.5">${regEsc(r.position || '-')}</td>
+                <td class="p-2.5">${regEsc(r.dept || '-')}</td></tr>`).join('')
+                : '<tr><td colspan="5" class="p-6 text-center text-slate-400">표시할 등록자가 없습니다.</td></tr>';
+        }
+
+        function renderRegList() {
+            const box = document.getElementById('reg-list-card');
+            if (!box) return;
+            if (!regListPw || !regList) {
+                box.innerHTML = `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div class="flex-1">
+                        <h3 class="text-sm font-bold text-slate-700">등록자 명단</h3>
+                        <p class="text-xs text-slate-500 mt-0.5">이름·회사 등 개인정보가 포함되어 있어 비밀번호를 입력해야 볼 수 있습니다.</p>
+                        ${regListError ? `<p class="text-xs text-rose-600 font-medium mt-1">${regEsc(regListError)}</p>` : ''}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input id="reg-list-pw" type="password" placeholder="명단 비밀번호" autocomplete="off" onkeydown="if(event.key==='Enter') unlockRegList()" class="w-44 text-sm p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button onclick="unlockRegList()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg whitespace-nowrap">${regListLoading ? '확인 중…' : '명단 보기'}</button>
+                    </div>
+                </div>`;
+                return;
+            }
+            box.innerHTML = `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-sm font-bold text-slate-700">등록자 명단</h3>
+                        <span id="reg-list-count" class="text-xs text-slate-500 tabular-nums"></span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <input type="text" value="${regEsc(regListQuery)}" oninput="setRegListQuery(this.value)" placeholder="회사·이름 검색" class="w-44 text-xs p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <input id="reg-ingest-file" type="file" accept=".xlsx,.xls" class="hidden" onchange="handleIngestFile(this)">
+                        <button onclick="pickIngestFile()" class="bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-3 py-2 rounded-lg whitespace-nowrap" title="아임웹에서 내려받은 엑셀을 선택하면 새 등록자만 구글 시트에 추가됩니다">${regIngesting ? '반영 중…' : '엑셀 업로드'}</button>
+                        <button onclick="lockRegList()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-2 rounded-lg">잠금</button>
+                    </div>
+                </div>
+                <div class="max-h-[32rem] overflow-y-auto overflow-x-auto">
+                    <table class="w-full text-sm text-left min-w-[560px]">
+                        <thead class="bg-slate-100 text-slate-700 sticky top-0"><tr>
+                            <th class="p-2.5 font-semibold w-36">등록일자</th><th class="p-2.5 font-semibold">회사 또는 단체명</th>
+                            <th class="p-2.5 font-semibold w-28">이름</th><th class="p-2.5 font-semibold w-32">직급 또는 직위</th><th class="p-2.5 font-semibold w-40">부서명</th>
+                        </tr></thead>
+                        <tbody id="reg-list-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+                ${regListError ? `<div class="p-3 text-xs text-amber-700 bg-amber-50 border-t border-amber-200">${regEsc(regListError)}</div>` : ''}
+            </div>`;
+            renderRegListRows();
+        }
+
+        // 사전등록 탭을 보고 있는 동안 60초마다 자동 갱신 (숫자 + 열려 있는 명단)
+        setInterval(() => {
+            const sec = document.getElementById('content-registration');
+            if (document.hidden || !sec || sec.classList.contains('hidden')) return;
+            loadRegistration(true);
+        }, 60000);
 
         function showToast(msg) {
             const toast = document.getElementById('toast');
