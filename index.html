@@ -2347,7 +2347,10 @@
                 if (!silent) showToast(regListError);
             } finally {
                 regListLoading = false;
-                renderRegList();
+                // 검색창에 입력 중이면 카드 전체를 다시 그리지 않고 표만 갱신 (포커스 유지)
+                const ae = document.activeElement;
+                if (regList && ae && ae.id === 'reg-list-search') renderRegListRows();
+                else renderRegList();
             }
         }
 
@@ -2411,23 +2414,35 @@
             }
         }
 
+        let regListMode = 'person';     // 'person' = 등록순 / 'company' = 회사별 보기
+        let regMergeOpen = false;       // 회사 묶음 확인 영역 펼침 상태 (자동 갱신해도 유지)
+
         function setRegListQuery(v) {
             regListQuery = v;
             renderRegListRows();
         }
 
-        function renderRegListRows() {
-            const body = document.getElementById('reg-list-body');
-            const count = document.getElementById('reg-list-count');
-            if (!body || !regList || !regList.list) return;
+        function setRegListMode(m) {
+            regListMode = m;
+            renderRegList();
+        }
+
+        // 서버가 회사 묶음 번호(cg)를 보내는 최신 버전인지
+        function regHasCompanyGroups() {
+            return !!(regList && regList.list && regList.list.every(r => typeof r.cg === 'number'));
+        }
+
+        // 검색 조건에 맞는 행. No. = 등록 순번(가장 먼저 등록한 사람이 1번)이며 검색해도 유지
+        function filteredRegRows() {
             const q = regListQuery.trim().toLowerCase();
-            const today = localTodayYmd();
-            // No. = 등록 순번(가장 먼저 등록한 사람이 1번). 목록은 최신순이라 맨 위가 가장 큰 번호이며, 검색해도 번호는 유지
             const total = regList.list.length;
-            const rows = regList.list.map((r, i) => Object.assign({ no: total - i }, r))
+            return regList.list.map((r, i) => Object.assign({ no: total - i }, r))
                 .filter(r => !q || [r.company, r.name, r.position, r.dept, r.source].join(' ').toLowerCase().includes(q));
-            if (count) count.textContent = q ? `${rows.length} / ${regList.total}명` : `${regList.total}명`;
-            body.innerHTML = rows.length ? rows.map(r => `<tr>
+        }
+
+        function regPersonTable(rows) {
+            const today = localTodayYmd();
+            const body = rows.length ? rows.map(r => `<tr>
                 <td class="p-2.5 text-center tabular-nums text-slate-400">${r.no}</td>
                 <td class="p-2.5 tabular-nums whitespace-nowrap">${fmtDay(r.date)}${r.date === today ? ' <span class="ml-1 text-[10px] font-bold bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full">NEW</span>' : ''}</td>
                 <td class="p-2.5 break-words text-slate-600">${regEsc(r.source || '-')}</td>
@@ -2436,6 +2451,88 @@
                 <td class="p-2.5 break-words">${regEsc(r.position || '-')}</td>
                 <td class="p-2.5 break-words">${regEsc(r.dept || '-')}</td></tr>`).join('')
                 : '<tr><td colspan="7" class="p-6 text-center text-slate-400">표시할 등록자가 없습니다.</td></tr>';
+            return `<table class="w-full table-fixed text-sm text-left min-w-[900px]">
+                <colgroup>
+                    <col style="width:5%"><col style="width:13%"><col style="width:17%"><col style="width:22%">
+                    <col style="width:11%"><col style="width:14%"><col style="width:18%">
+                </colgroup>
+                <thead class="bg-slate-100 text-slate-700 sticky top-0"><tr>
+                    <th class="p-2.5 font-semibold text-center">No.</th><th class="p-2.5 font-semibold">등록일자</th><th class="p-2.5 font-semibold">인지경로</th>
+                    <th class="p-2.5 font-semibold">회사 또는 단체명</th><th class="p-2.5 font-semibold">이름</th><th class="p-2.5 font-semibold">직급 또는 직위</th><th class="p-2.5 font-semibold">부서명</th>
+                </tr></thead>
+                <tbody class="divide-y divide-slate-100">${body}</tbody></table>`;
+        }
+
+        function regCompanyTable(rows) {
+            const today = localTodayYmd();
+            const nameOf = {};
+            (regList.groups || []).forEach(g => { nameOf[g.id] = g.name; });
+            const mergedBy = {};                               // 대표 표기 → 합쳐진 표기들
+            (regList.merged || []).forEach(m => { mergedBy[m.names[0]] = m.names; });
+            const by = {};
+            rows.forEach(r => { const k = r.cg || 0; (by[k] = by[k] || []).push(r); });
+            const cos = Object.keys(by).map(k => ({
+                cg: Number(k),
+                name: Number(k) ? (nameOf[k] || by[k][0].company) : '(회사 미입력)',
+                members: by[k]
+            })).sort((a, b) => (a.cg === 0) - (b.cg === 0) || b.members.length - a.members.length || a.name.localeCompare(b.name, 'ko'));
+
+            const body = cos.length ? cos.map((c, i) => {
+                const latest = c.members.reduce((m, r) => (r.date > m ? r.date : m), '');
+                const variants = mergedBy[c.name];
+                const tag = variants ? ` <span class="ml-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full align-middle" title="${regEsc('합쳐서 센 표기: ' + variants.join(' / '))}">표기 ${variants.length}종</span>` : '';
+                const people = c.members.map(m => `<span class="whitespace-nowrap"><span class="font-semibold">${regEsc(m.name || '-')}</span>${m.position ? ` <span class="text-slate-400 text-xs">${regEsc(m.position)}</span>` : ''}</span>`).join('<span class="text-slate-300"> · </span>');
+                return `<tr>
+                    <td class="p-2.5 text-center tabular-nums text-slate-400">${i + 1}</td>
+                    <td class="p-2.5 break-words font-semibold ${c.cg === 0 ? 'text-slate-400' : ''}">${regEsc(c.name)}${tag}</td>
+                    <td class="p-2.5 text-center tabular-nums font-bold">${c.members.length}<span class="text-xs font-normal text-slate-400">명</span></td>
+                    <td class="p-2.5 break-words leading-relaxed">${people}</td>
+                    <td class="p-2.5 tabular-nums whitespace-nowrap">${latest ? fmtDay(latest) : '-'}${latest === today ? ' <span class="ml-1 text-[10px] font-bold bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full">NEW</span>' : ''}</td></tr>`;
+            }).join('') : '<tr><td colspan="5" class="p-6 text-center text-slate-400">표시할 회사가 없습니다.</td></tr>';
+
+            return `<table class="w-full table-fixed text-sm text-left min-w-[760px]">
+                <colgroup><col style="width:5%"><col style="width:27%"><col style="width:8%"><col style="width:45%"><col style="width:15%"></colgroup>
+                <thead class="bg-slate-100 text-slate-700 sticky top-0"><tr>
+                    <th class="p-2.5 font-semibold text-center">No.</th><th class="p-2.5 font-semibold">회사 또는 단체명</th><th class="p-2.5 font-semibold text-center">인원</th>
+                    <th class="p-2.5 font-semibold">등록자</th><th class="p-2.5 font-semibold">최근 등록일</th>
+                </tr></thead>
+                <tbody class="divide-y divide-slate-100">${body}</tbody></table>`;
+        }
+
+        function renderRegListRows() {
+            const wrap = document.getElementById('reg-list-table-wrap');
+            const count = document.getElementById('reg-list-count');
+            if (!wrap || !regList || !regList.list) return;
+            const rows = filteredRegRows();
+            const q = regListQuery.trim();
+            const people = q ? `${rows.length} / ${regList.total}명` : `${regList.total}명`;
+            let text = people;
+            if (regHasCompanyGroups()) {
+                const cos = new Set(rows.filter(r => r.cg > 0).map(r => r.cg)).size;
+                const blankN = rows.filter(r => !r.cg).length;
+                text += ` · ${cos}개 회사` + (blankN ? ` (회사 미입력 ${blankN}명)` : '');
+            }
+            if (count) count.textContent = text;
+            wrap.innerHTML = (regListMode === 'company' && regHasCompanyGroups()) ? regCompanyTable(rows) : regPersonTable(rows);
+        }
+
+        // 회사 묶음 확인: 어떤 표기를 합쳤는지 / 합치지 않은 유사 상호
+        function regMergeInfo() {
+            if (!regHasCompanyGroups()) return '';
+            const m = regList.merged || [], s = regList.suspects || [];
+            if (!m.length && !s.length) return '';
+            const mergedHtml = m.length
+                ? m.map(x => `<li class="flex flex-wrap items-center gap-x-2 gap-y-1"><span>${x.names.map(regEsc).join(' <span class="text-slate-400">=</span> ')}</span><span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">${regEsc(x.reason)}</span></li>`).join('')
+                : '<li class="text-slate-400">없음</li>';
+            const suspectHtml = s.length
+                ? s.map(x => `<li>${regEsc(x.a)} <span class="text-slate-400">↔</span> ${regEsc(x.b)}</li>`).join('')
+                : '<li class="text-slate-400">없음</li>';
+            return `<details class="border-t border-slate-200" ${regMergeOpen ? 'open' : ''} ontoggle="regMergeOpen = this.open">
+                <summary class="px-4 py-3 cursor-pointer select-none text-xs font-bold text-slate-600 hover:bg-slate-50">회사 묶음 확인 — 합쳐서 센 회사 ${m.length}건 · 합치지 않은 유사 상호 ${s.length}쌍</summary>
+                <div class="px-4 pb-4 grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
+                    <div><div class="font-semibold text-slate-700 mb-1.5">합쳐서 1개 회사로 센 상호</div><ul class="space-y-1.5">${mergedHtml}</ul></div>
+                    <div><div class="font-semibold text-slate-700 mb-1.5">이름은 비슷하지만 회사 이메일 도메인이 달라 합치지 않음 (직접 확인)</div><ul class="space-y-1.5">${suspectHtml}</ul></div>
+                </div></details>`;
         }
 
         function renderRegList() {
@@ -2455,33 +2552,24 @@
                 </div>`;
                 return;
             }
+            const modeBtn = (m, label) => `<button onclick="setRegListMode('${m}')" class="px-3 py-2 ${m === 'company' ? 'border-l border-slate-300 ' : ''}${regListMode === m ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}">${label}</button>`;
             box.innerHTML = `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div class="p-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <h3 class="text-sm font-bold text-slate-700">등록자 명단</h3>
                         <span id="reg-list-count" class="text-xs text-slate-500 tabular-nums"></span>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
-                        <input type="text" value="${regEsc(regListQuery)}" oninput="setRegListQuery(this.value)" placeholder="회사·이름 검색" class="w-44 text-xs p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        ${regHasCompanyGroups() ? `<div class="inline-flex rounded-lg border border-slate-300 overflow-hidden text-xs font-bold">${modeBtn('person', '등록순')}${modeBtn('company', '회사별 보기')}</div>` : ''}
+                        <input id="reg-list-search" type="text" value="${regEsc(regListQuery)}" oninput="setRegListQuery(this.value)" placeholder="회사·이름 검색" class="w-44 text-xs p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         <input id="reg-ingest-file" type="file" accept=".xlsx,.xls" class="hidden" onchange="handleIngestFile(this)">
                         <button onclick="pickIngestFile()" class="bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-3 py-2 rounded-lg whitespace-nowrap" title="아임웹에서 내려받은 엑셀을 선택하면 새 등록자만 구글 시트에 추가됩니다">${regIngesting ? '반영 중…' : '엑셀 업로드'}</button>
                         <button onclick="lockRegList()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-2 rounded-lg">잠금</button>
                     </div>
                 </div>
-                <div class="max-h-[32rem] overflow-y-auto overflow-x-auto">
-                    <table class="w-full table-fixed text-sm text-left min-w-[900px]">
-                        <colgroup>
-                            <col style="width:5%"><col style="width:13%"><col style="width:17%"><col style="width:22%">
-                            <col style="width:11%"><col style="width:14%"><col style="width:18%">
-                        </colgroup>
-                        <thead class="bg-slate-100 text-slate-700 sticky top-0"><tr>
-                            <th class="p-2.5 font-semibold text-center">No.</th><th class="p-2.5 font-semibold">등록일자</th><th class="p-2.5 font-semibold">인지경로</th>
-                            <th class="p-2.5 font-semibold">회사 또는 단체명</th><th class="p-2.5 font-semibold">이름</th><th class="p-2.5 font-semibold">직급 또는 직위</th><th class="p-2.5 font-semibold">부서명</th>
-                        </tr></thead>
-                        <tbody id="reg-list-body" class="divide-y divide-slate-100"></tbody>
-                    </table>
-                </div>
+                <div id="reg-list-table-wrap" class="max-h-[32rem] overflow-y-auto overflow-x-auto"></div>
                 ${regListError ? `<div class="p-3 text-xs text-amber-700 bg-amber-50 border-t border-amber-200">${regEsc(regListError)}</div>` : ''}
+                ${regMergeInfo()}
             </div>`;
             renderRegListRows();
         }
