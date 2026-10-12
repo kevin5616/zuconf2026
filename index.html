@@ -58,8 +58,8 @@
             box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3) !important;
         }
 
-        body.edit-mode [contenteditable="true"]:hover { outline: 2px dashed #a5b4fc; background-color: #f8fafc; cursor: text; }
-        body.edit-mode [contenteditable="true"]:focus { outline: 2px solid #6366f1; background-color: #ffffff; border-radius: 4px; }
+        body.edit-mode [contenteditable="true"]:hover, body.edit-mode [contenteditable="plaintext-only"]:hover { outline: 2px dashed #a5b4fc; background-color: #f8fafc; cursor: text; }
+        body.edit-mode [contenteditable="true"]:focus, body.edit-mode [contenteditable="plaintext-only"]:focus { outline: 2px solid #6366f1; background-color: #ffffff; border-radius: 4px; }
         
         body:not(.edit-mode) .admin-only { display: none !important; }
         body:not(.edit-mode) [contenteditable] { cursor: default !important; user-select: text; }
@@ -1686,9 +1686,28 @@
             if(window.lucide) lucide.createIcons();
         }
 
+        // 표 셀 편집: Enter = 줄바꿈. 지원하는 브라우저는 plaintext-only(Enter가 줄바꿈 문자로 입력, 붙여넣기는 글자만),
+        // 지원하지 않으면 기존 방식(true). 줄바꿈이 보이도록 셀에는 whitespace-pre-wrap 을 사용
+        const CELL_EDIT_MODE = (() => {
+            try {
+                const el = document.createElement('div');
+                el.setAttribute('contenteditable', 'plaintext-only');
+                return el.contentEditable === 'plaintext-only' ? 'plaintext-only' : 'true';
+            } catch (e) { return 'true'; }
+        })();
+
+        function cellEditAttr() {
+            return isEditMode ? `contenteditable="${CELL_EDIT_MODE}"` : 'contenteditable="false"';
+        }
+
+        // 편집한 셀의 글자를 저장용으로 정리 (nbsp → 공백, 앞뒤 불필요한 줄바꿈·공백 제거, 중간 줄바꿈은 유지)
+        function cellText(el) {
+            return el.innerText.replace(/ /g, ' ').replace(/^\s*\n/, '').replace(/\s+$/, '');
+        }
+
         function renderOnsite() {
             const tbody = document.getElementById('onsite-table-body');
-            const editableAttr = isEditMode ? 'contenteditable="true"' : 'contenteditable="false"';
+            const editableAttr = cellEditAttr();
 
             tbody.innerHTML = dbData.onsite.map((item, i) => `
                 <tr draggable="${isEditMode}"
@@ -1706,16 +1725,16 @@
                     </td>
                     <td class="p-3.5 text-center font-bold text-slate-400 tabular-nums align-middle">${i + 1}</td>
                     <td class="p-3.5 font-bold text-slate-800 text-sm align-middle">
-                        <span ${editableAttr} onblur="updateCell('onsite', ${i}, 'item', this.innerText)">${item.item}</span>
+                        <div ${editableAttr} onblur="updateCell('onsite', ${i}, 'item', cellText(this))" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words min-h-[1.5rem]">${regEsc(item.item || '')}</div>
                     </td>
                     <td class="p-3.5 font-bold text-indigo-700 bg-indigo-50/30 rounded text-sm align-middle">
-                        <span ${editableAttr} onblur="updateCell('onsite', ${i}, 'owner', this.innerText)">${item.owner}</span>
+                        <div ${editableAttr} onblur="updateCell('onsite', ${i}, 'owner', cellText(this))" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words min-h-[1.5rem]">${regEsc(item.owner || '')}</div>
                     </td>
                     <td class="p-3.5 text-slate-800 font-medium text-sm align-middle">
-                        <span ${editableAttr} onblur="updateCell('onsite', ${i}, 'check', this.innerText)">${item.check}</span>
+                        <div ${editableAttr} onblur="updateCell('onsite', ${i}, 'check', cellText(this))" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words min-h-[1.5rem]">${regEsc(item.check || '')}</div>
                     </td>
                     <td class="p-3.5 text-slate-600 text-sm align-middle">
-                        <span ${editableAttr} onblur="updateCell('onsite', ${i}, 'details', this.innerText)">${item.details || ''}</span>
+                        <div ${editableAttr} onblur="updateCell('onsite', ${i}, 'details', cellText(this))" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words min-h-[1.5rem]">${regEsc(item.details || '')}</div>
                     </td>
                     <td class="p-3.5 text-center align-middle">${getBadgeHtml(item.status, 'onsite', i)}</td>
                     <td class="admin-only p-3.5 text-center align-middle">
@@ -1728,7 +1747,7 @@
 
         function renderPost() {
             const tbody = document.getElementById('post-table-body');
-            const editableAttr = isEditMode ? 'contenteditable="true"' : 'contenteditable="false"';
+            const editableAttr = cellEditAttr();
 
             tbody.innerHTML = dbData.post.map((item, i) => `
                 <tr draggable="${isEditMode}"
@@ -1745,16 +1764,16 @@
                         </div>
                     </td>
                     <td class="p-3.5 font-bold text-slate-800 w-36 align-middle">
-                        <span ${editableAttr} onblur="updateCell('post', ${i}, 'stage', this.innerText)" class="px-1 py-0.5 rounded block whitespace-normal break-words">${item.stage || ''}</span>
+                        <div ${editableAttr} onblur="updateCell('post', ${i}, 'stage', cellText(this))" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words min-h-[1.5rem]">${regEsc(item.stage || '')}</div>
                     </td>
                     <td class="p-3.5 font-bold text-slate-800 w-48 align-middle">
-                        <span ${editableAttr} onblur="updateCell('post', ${i}, 'item', this.innerText)" class="px-1 py-0.5 rounded block whitespace-normal break-words">${item.item}</span>
+                        <div ${editableAttr} onblur="updateCell('post', ${i}, 'item', cellText(this))" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words min-h-[1.5rem]">${regEsc(item.item || '')}</div>
                     </td>
                     <td class="p-3.5 text-slate-600 w-60 align-middle">
-                        <span ${editableAttr} onblur="updateCell('post', ${i}, 'check', this.innerText)" class="px-1 py-0.5 rounded block whitespace-normal break-words">${item.check}</span>
+                        <div ${editableAttr} onblur="updateCell('post', ${i}, 'check', cellText(this))" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words min-h-[1.5rem]">${regEsc(item.check || '')}</div>
                     </td>
                     <td class="p-3.5 text-slate-700 w-48 align-middle">
-                        <span ${editableAttr} onblur="updateCell('post', ${i}, 'content', this.innerText)" class="px-1 py-0.5 rounded block whitespace-normal break-words">${item.content || ''}</span>
+                        <div ${editableAttr} onblur="updateCell('post', ${i}, 'content', cellText(this))" class="px-1 py-0.5 rounded whitespace-pre-wrap break-words min-h-[1.5rem]">${regEsc(item.content || '')}</div>
                     </td>
                     <td class="p-3.5 text-center align-middle">${getBadgeHtml(item.status, 'post', i)}</td>
                     <td class="admin-only p-3.5 text-center align-middle">
