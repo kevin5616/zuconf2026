@@ -71,6 +71,24 @@
         tr.drag-over-bottom, .board-card.drag-over-bottom { border-bottom: 3px solid #4f46e5 !important; }
         .drag-handle { cursor: grab; }
         .drag-handle:active { cursor: grabbing; }
+
+        /* ===== 사전등록 보고서 (A4 세로, 브라우저 인쇄 / PDF 저장) ===== */
+        #report-overlay { display: none; position: fixed; inset: 0; z-index: 100; overflow: auto; background: #e2e8f0; }
+        body.report-open #report-overlay { display: block; }
+        body.report-open { overflow: hidden; }
+        .report-paper { width: 210mm; min-height: 297mm; margin: 16px auto 40px; padding: 12mm; background: #fff; box-shadow: 0 8px 30px rgba(15, 23, 42, .18); box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .report-paper svg { max-width: 100%; }
+        @page { size: A4 portrait; margin: 12mm; }
+        @media print {
+            html, body { background: #fff !important; overflow: visible !important; height: auto !important; }
+            body.report-open > *:not(#report-overlay) { display: none !important; }
+            #report-overlay { position: static !important; overflow: visible !important; background: #fff !important; }
+            #report-toolbar { display: none !important; }
+            .report-paper { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+            .report-avoid { break-inside: avoid; page-break-inside: avoid; }
+            .report-paper thead { display: table-header-group; }
+            .report-paper tr { break-inside: avoid; page-break-inside: avoid; }
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
@@ -409,6 +427,9 @@
                 </div>
                 <div class="flex items-center gap-2 self-end sm:self-auto">
                     <span id="reg-updated" class="text-xs text-slate-400"></span>
+                    <button onclick="openReport()" class="bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1" title="현재 화면 내용을 A4 세로 보고서로 만들어 인쇄하거나 PDF로 저장합니다">
+                        <i data-lucide="file-text" class="w-4 h-4"></i> 보고서 / PDF
+                    </button>
                     <button onclick="loadRegistration(true)" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1">
                         <i data-lucide="refresh-cw" class="w-4 h-4"></i> 새로고침
                     </button>
@@ -631,6 +652,12 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- 사전등록 보고서 (A4 세로 인쇄 / PDF) -->
+    <div id="report-overlay">
+        <div id="report-toolbar"></div>
+        <div id="report-paper-wrap"></div>
     </div>
 
     <!-- Toast Notification -->
@@ -2607,6 +2634,211 @@
             if (document.hidden || !sec || sec.classList.contains('hidden')) return;
             loadRegistration(true);
         }, 60000);
+
+        // ================================================================
+        // 사전등록 보고서 (A4 세로) — 화면의 집계를 보고서 형태로 만들어 브라우저 인쇄 / PDF 저장
+        // 개인정보(이름·연락처·이메일)는 넣지 않음. 회사별 순위는 명단 비밀번호를 입력한 경우에만 선택 가능
+        // ================================================================
+        const reportOpts = { charts: true, dist: true, companies: false, daily: true, comment: '' };
+        const REPORT_EVENT_TEXT = '2026-10-22(목) 13:00~17:30 · L7 광명 바이 롯데호텔';
+
+        function regMetrics(r) {
+            const daily = r.daily, total = r.total;
+            const idxToday = daily.findIndex(d => d.date === r.today);
+            const todayCnt = idxToday >= 0 ? daily[idxToday].count : 0;
+            const yestCnt = idxToday > 0 ? daily[idxToday - 1].count : 0;
+            const recent = daily.slice(-7);
+            const avg7 = recent.reduce((s, d) => s + d.count, 0) / recent.length;
+            const daysLeft = daysUntilEvent();
+            const remain = Math.max(0, REG_TARGET_MIN - total);
+            return {
+                total, todayCnt, yestCnt, recent, avg7, daysLeft, remain,
+                perDay: daysLeft > 0 ? remain / daysLeft : 0,
+                pctMin: Math.round(total / REG_TARGET_MIN * 100),
+                barW: Math.min(100, total / REG_TARGET_MAX * 100),
+                markerL: REG_TARGET_MIN / REG_TARGET_MAX * 100
+            };
+        }
+
+        function reportCompaniesAvailable() {
+            return !!(regListPw && regList && regHasCompanyGroups() && (regList.groups || []).length);
+        }
+
+        function reportStamp() {
+            const n = new Date();
+            const p = x => String(x).padStart(2, '0');
+            return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}(${WEEKDAYS[n.getDay()]}) ${p(n.getHours())}:${p(n.getMinutes())}`;
+        }
+
+        async function openReport() {
+            await loadRegistration(true);
+            if (regListPw) await loadRegList(true);        // 회사별 순위용 (비밀번호를 입력한 경우만)
+            if (!regData || !regData.found || !regData.daily || !regData.daily.length) {
+                showToast('보고서로 만들 사전등록 데이터가 없습니다.');
+                return;
+            }
+            if (!reportCompaniesAvailable()) reportOpts.companies = false;
+            buildReportToolbar();
+            renderReport();
+            document.body.classList.add('report-open');
+            document.getElementById('report-overlay').scrollTop = 0;
+        }
+
+        function closeReport() { document.body.classList.remove('report-open'); }
+        function printReport() { window.print(); }
+
+        function setReportOpt(k, v) { reportOpts[k] = v; renderReport(); }
+
+        function buildReportToolbar() {
+            const bar = document.getElementById('report-toolbar');
+            const canCo = reportCompaniesAvailable();
+            const chk = (k, label, disabled, hint) => `<label class="inline-flex items-center gap-1.5 ${disabled ? 'text-slate-300' : 'text-slate-700'}">
+                <input type="checkbox" ${reportOpts[k] ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="setReportOpt('${k}', this.checked)" class="rounded border-slate-300"> ${label}${hint ? ` <span class="text-[10px] text-slate-400">${hint}</span>` : ''}</label>`;
+            bar.innerHTML = `<div class="sticky top-0 z-10 bg-white border-b border-slate-300 shadow-sm">
+                <div class="mx-auto px-4 py-3 space-y-2.5" style="max-width:210mm">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <div class="text-sm font-bold text-slate-900">사전등록 현황 보고서 <span class="text-xs font-normal text-slate-500">A4 세로 · 미리보기</span></div>
+                            <div class="text-[11px] text-slate-500">인쇄 창에서 <b>대상: PDF로 저장</b>을 고르고, <b>머리글 및 바닥글</b>을 끄면 더 깔끔합니다.</div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="printReport()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-lg">인쇄 / PDF 저장</button>
+                            <button onclick="closeReport()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-2 rounded-lg">닫기</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                        <span class="font-semibold text-slate-500">포함 항목</span>
+                        ${chk('charts', '추이 차트')}${chk('dist', '분포(산업·직무·인지경로)')}${chk('daily', '일별 현황 표')}${chk('companies', '회사별 인원 순위', !canCo, canCo ? '' : '(명단 비밀번호 입력 후 선택 가능)')}
+                    </div>
+                    <textarea oninput="reportOpts.comment = this.value; renderReport()" rows="2" placeholder="보고 코멘트(선택) — 입력하면 보고서 맨 위에 함께 인쇄됩니다" class="w-full text-xs p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">${regEsc(reportOpts.comment)}</textarea>
+                </div></div>`;
+        }
+
+        function reportSection(title, body) {
+            return `<section class="report-avoid mt-5"><h2 class="text-[12px] font-bold text-slate-800 border-l-4 border-indigo-500 pl-2 mb-2">${title}</h2>${body}</section>`;
+        }
+
+        function reportDist(title, list, total) {
+            if (!list || !list.length) return '';
+            const TOP = 7;
+            let rows = list.slice(0, TOP);
+            const rest = list.slice(TOP).reduce((s, x) => s + x.count, 0);
+            if (rest > 0) rows = rows.concat([{ label: '기타', count: rest }]);
+            return `<div class="border border-slate-200 rounded-lg p-2.5"><div class="text-[11px] font-bold text-slate-700 mb-1.5">${title}</div>${rows.map(x => {
+                const pct = total ? Math.round(x.count / total * 100) : 0;
+                return `<div class="mb-1.5"><div class="flex justify-between gap-2 text-[10px]"><span class="text-slate-700 break-words">${regEsc(x.label)}</span><span class="text-slate-500 tabular-nums shrink-0">${x.count}명 · ${pct}%</span></div>
+                    <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-indigo-500 rounded-full" style="width:${pct}%"></div></div></div>`;
+            }).join('')}</div>`;
+        }
+
+        function renderReport() {
+            const wrap = document.getElementById('report-paper-wrap');
+            const r = regData;
+            if (!wrap || !r || !r.daily || !r.daily.length) return;
+            const mt = regMetrics(r), daily = r.daily, total = r.total;
+            const card = (label, value, sub, extra) => `<div class="border border-slate-200 rounded-lg p-3">
+                <div class="text-[10px] font-semibold text-slate-500">${label}</div>
+                <div class="text-2xl font-black text-slate-900 tabular-nums leading-tight mt-0.5">${value}</div>
+                <div class="text-[10px] text-slate-500 mt-0.5">${sub}</div>${extra || ''}</div>`;
+            const unit = '<span class="text-sm font-bold text-slate-500">명</span>';
+            const need = mt.daysLeft > 0
+                ? (mt.remain > 0 ? `${REG_TARGET_MIN}명까지 ${mt.remain}명 · 하루 평균 ${mt.perDay.toFixed(1)}명 필요` : `최소 목표(${REG_TARGET_MIN}명) 달성`)
+                : '행사 당일/종료';
+            const progress = `<div class="relative h-1.5 bg-slate-100 rounded-full mt-2"><div class="h-full bg-indigo-500 rounded-full" style="width:${mt.barW}%"></div><div class="absolute -top-0.5 h-2.5 border-l-2 border-amber-500" style="left:${mt.markerL}%"></div></div>`;
+
+            const kpis = `<div class="grid grid-cols-3 gap-2.5 report-avoid mt-4">
+                ${card('총 등록 (중복 제외)', `${total}${unit}`, `목표 ${REG_TARGET_MIN}~${REG_TARGET_MAX}명 대비 ${mt.pctMin}%`, progress)}
+                ${card('회사 / 단체 수', `${r.companies}<span class="text-sm font-bold text-slate-500">개</span>`, r.blankCompany ? `회사 미입력 ${r.blankCompany}명 제외` : '같은 회사는 1곳으로 계산')}
+                ${card('신청 건수', `${r.rawCount}<span class="text-sm font-bold text-slate-500">건</span>`, `중복 ${r.duplicates}건 제외`)}
+                ${card('오늘 신규', `${mt.todayCnt}${unit}`, `어제 ${mt.yestCnt}명`)}
+                ${card('최근 7일 일평균', `${mt.avg7.toFixed(1)}${unit}`, `${fmtDay(mt.recent[0].date)} ~ ${fmtDay(mt.recent[mt.recent.length - 1].date)}`)}
+                ${card('행사까지', `<span class="text-amber-500">${ddayLabel(mt.daysLeft)}</span>`, need)}
+            </div>`;
+
+            const comment = reportOpts.comment.trim()
+                ? `<div class="report-avoid mt-4 border-l-4 border-amber-400 bg-amber-50 rounded-r-lg px-3 py-2"><div class="text-[10px] font-bold text-amber-700 mb-0.5">보고 코멘트</div><div class="text-[11px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed">${regEsc(reportOpts.comment.trim())}</div></div>` : '';
+
+            const charts = reportOpts.charts
+                ? reportSection('누적 등록 추이', regCumChart(daily)) + reportSection('일별 신규 등록', regBarChart(daily)) : '';
+
+            const dist = reportOpts.dist
+                ? reportSection('등록자 분포', `<div class="grid grid-cols-3 gap-2.5">${reportDist('산업분야', r.industry, total)}${reportDist('직무와 역할', r.role, total)}${reportDist('인지경로', r.source, total)}</div>`) : '';
+
+            let companies = '';
+            if (reportOpts.companies && reportCompaniesAvailable()) {
+                const gs = (regList.groups || []).slice();
+                const TOP = 15, top = gs.slice(0, TOP), rest = gs.slice(TOP);
+                const peak = top.length ? top[0].count : 1;
+                const topSum = top.reduce((s, g) => s + g.count, 0);
+                const rows = top.map((g, i) => `<tr><td class="py-1 pr-2 text-center text-slate-400 tabular-nums">${i + 1}</td><td class="py-1 pr-2 break-words font-medium">${regEsc(g.name)}</td>
+                    <td class="py-1 px-2"><div class="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-indigo-400 rounded-full" style="width:${g.count / peak * 100}%"></div></div></td>
+                    <td class="py-1 pl-2 text-right tabular-nums font-semibold">${g.count}명</td></tr>`).join('');
+                companies = reportSection(`회사별 인원 순위 (상위 ${top.length}개 회사)`,
+                    `<table class="w-full table-fixed text-[10.5px]"><colgroup><col style="width:6%"><col style="width:50%"><col style="width:32%"><col style="width:12%"></colgroup><tbody class="divide-y divide-slate-100">${rows}</tbody></table>
+                     <div class="text-[10px] text-slate-500 mt-1.5">상위 ${top.length}개 회사 ${topSum}명${rest.length ? ` · 그 외 ${rest.length}개 회사 ${rest.reduce((s, g) => s + g.count, 0)}명` : ''} · 표기가 다른 같은 회사는 1곳으로 합산했습니다.</div>`);
+            }
+
+            let dailyTable = '';
+            if (reportOpts.daily) {
+                const peakDay = Math.max(...daily.map(d => d.count), 1);
+                const evUtc = ymdToUtc(EVENT_DATE_YMD);
+                const body = daily.map((d, i) => {
+                    const prev = i > 0 ? daily[i - 1].count : null;
+                    const diff = prev === null ? null : d.count - prev;
+                    const diffHtml = diff === null || diff === 0 ? '<span class="text-slate-300">-</span>'
+                        : (diff > 0 ? `<span class="text-emerald-600 font-semibold">▲ ${diff}</span>` : `<span class="text-rose-500 font-semibold">▼ ${Math.abs(diff)}</span>`);
+                    const goal = Math.round(d.cum / REG_TARGET_MIN * 100);
+                    const left = Math.round((evUtc - ymdToUtc(d.date)) / 86400000);
+                    return `<tr class="${d.count === 0 ? 'text-slate-400' : ''}">
+                        <td class="py-1 pr-2 tabular-nums whitespace-nowrap">${fmtDay(d.date)}</td>
+                        <td class="py-1 text-center tabular-nums text-slate-500">${ddayLabel(left)}</td>
+                        <td class="py-1 px-2"><div class="flex items-center gap-1.5"><div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-indigo-400 rounded-full" style="width:${d.count / peakDay * 100}%"></div></div><span class="w-6 text-right tabular-nums font-semibold">${d.count}</span></div></td>
+                        <td class="py-1 text-right tabular-nums">${d.cum}</td>
+                        <td class="py-1 px-2"><div class="flex items-center gap-1.5"><div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full ${goal >= 100 ? 'bg-emerald-400' : 'bg-amber-400'} rounded-full" style="width:${Math.min(100, goal)}%"></div></div><span class="w-8 text-right tabular-nums">${goal}%</span></div></td>
+                        <td class="py-1 text-center tabular-nums">${diffHtml}</td></tr>`;
+                }).join('');
+                dailyTable = `<section class="mt-5"><h2 class="text-[12px] font-bold text-slate-800 border-l-4 border-indigo-500 pl-2 mb-2">일별 현황</h2>
+                    <table class="w-full table-fixed text-[10.5px] text-left">
+                        <colgroup><col style="width:17%"><col style="width:10%"><col style="width:25%"><col style="width:11%"><col style="width:25%"><col style="width:12%"></colgroup>
+                        <thead class="text-slate-600"><tr class="border-b border-slate-300">
+                            <th class="py-1 pr-2 font-semibold">날짜</th><th class="py-1 text-center font-semibold">D-Day</th><th class="py-1 px-2 font-semibold">신규(명)</th>
+                            <th class="py-1 text-right font-semibold">누적(명)</th><th class="py-1 px-2 font-semibold">목표 달성률</th><th class="py-1 text-center font-semibold">전일 대비</th>
+                        </tr></thead>
+                        <tbody class="divide-y divide-slate-100">${body}</tbody></table>
+                    <div class="text-[10px] text-slate-400 mt-1">달성률은 최소 목표 ${REG_TARGET_MIN}명 대비 누적 인원 기준입니다.</div></section>`;
+            }
+
+            const notes = `<div class="report-avoid mt-6 pt-3 border-t border-slate-200 text-[9.5px] leading-relaxed text-slate-500 space-y-0.5">
+                <div>· 집계 기준: 아임웹 사전등록 시트이며, 같은 이메일(없으면 휴대전화번호)은 1명으로 계산했습니다.</div>
+                <div>· 회사 수: (주) 등 표기 차이와 같은 회사 이메일 도메인(개인 메일 제외)을 근거로 같은 회사를 1곳으로 묶어 계산했습니다.</div>
+                <div>· 개인정보(이름·연락처·이메일)는 이 보고서에 포함하지 않았습니다.</div>
+            </div>`;
+
+            wrap.innerHTML = `<div class="report-paper text-slate-800">
+                <div class="flex items-end justify-between gap-4 border-b-2 border-indigo-600 pb-3">
+                    <div>
+                        <div class="text-[10px] font-bold tracking-wider text-indigo-600">ZUCONF 2026 · 주민회의 2026</div>
+                        <h1 class="text-[22px] font-extrabold tracking-tight text-slate-900 leading-tight">사전등록 현황 보고</h1>
+                        <div class="text-[10.5px] text-slate-500 mt-1">${REPORT_EVENT_TEXT}</div>
+                    </div>
+                    <div class="text-right text-[10px] text-slate-500 leading-relaxed shrink-0">
+                        <div class="text-[11px] font-bold text-slate-700">${reportStamp()} 기준</div>
+                        <div>주최 (주)줌인테크 · 후원 오토데스크</div>
+                    </div>
+                </div>
+                ${comment}${kpis}${charts}${dist}${companies}${dailyTable}${notes}
+            </div>`;
+        }
+
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('report-open')) closeReport(); });
+        // PDF 로 저장할 때 기본 파일명 (인쇄 중에만 문서 제목 변경)
+        let reportTitleBackup = '';
+        window.addEventListener('beforeprint', () => {
+            if (!document.body.classList.contains('report-open')) return;
+            reportTitleBackup = document.title;
+            document.title = '주민회의2026_사전등록현황_' + reportStamp().slice(0, 10);
+        });
+        window.addEventListener('afterprint', () => { if (reportTitleBackup) { document.title = reportTitleBackup; reportTitleBackup = ''; } });
 
         function showToast(msg) {
             const toast = document.getElementById('toast');
