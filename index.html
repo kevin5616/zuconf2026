@@ -2538,19 +2538,27 @@
         // 회사 묶음 확인: 어떤 표기를 합쳤는지 / 합치지 않은 유사 상호
         function regMergeInfo() {
             if (!regHasCompanyGroups()) return '';
-            const m = regList.merged || [], s = regList.suspects || [];
-            if (!m.length && !s.length) return '';
+            const m = regList.merged || [], s = regList.suspects || [], sh = regList.sharedDomains || [];
+            if (!m.length && !s.length && !sh.length) return '';
             const mergedHtml = m.length
-                ? m.map(x => `<li class="flex flex-wrap items-center gap-x-2 gap-y-1"><span>${x.names.map(regEsc).join(' <span class="text-slate-400">=</span> ')}</span><span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">${regEsc(x.reason)}</span></li>`).join('')
+                ? m.map(x => `<li class="space-y-1"><div>${x.names.map(regEsc).join(' <span class="text-slate-400">=</span> ')}</div><span class="inline-block text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">${regEsc(x.reason)}</span></li>`).join('')
                 : '<li class="text-slate-400">없음</li>';
             const suspectHtml = s.length
                 ? s.map(x => `<li>${regEsc(x.a)} <span class="text-slate-400">↔</span> ${regEsc(x.b)}</li>`).join('')
                 : '<li class="text-slate-400">없음</li>';
+            const sharedHtml = sh.length
+                ? `<div class="lg:col-span-2"><div class="font-semibold text-slate-700 mb-1.5">여러 상호가 함께 쓰는 도메인 — 공용 도메인으로 보고 합치지 않음 (같은 회사면 직접 확인)</div><ul class="space-y-1.5">${sh.map(x => `<li><span class="font-semibold">${regEsc(x.domain)}</span> <span class="text-slate-400">→</span> ${x.names.map(regEsc).join(', ')}</li>`).join('')}</ul></div>`
+                : '';
             return `<details class="border-t border-slate-200" ${regMergeOpen ? 'open' : ''} ontoggle="regMergeOpen = this.open">
-                <summary class="px-4 py-3 cursor-pointer select-none text-xs font-bold text-slate-600 hover:bg-slate-50">회사 묶음 확인 — 합쳐서 센 회사 ${m.length}건 · 합치지 않은 유사 상호 ${s.length}쌍</summary>
+                <summary class="px-4 py-3 cursor-pointer select-none text-xs font-bold text-slate-600 hover:bg-slate-50">회사 묶음 확인 — 합쳐서 센 회사 ${m.length}건 · 합치지 않은 유사 상호 ${s.length}쌍${sh.length ? ` · 공용 도메인 의심 ${sh.length}건` : ''}</summary>
                 <div class="px-4 pb-4 grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
-                    <div><div class="font-semibold text-slate-700 mb-1.5">합쳐서 1개 회사로 센 상호</div><ul class="space-y-1.5">${mergedHtml}</ul></div>
+                    <div class="lg:col-span-2 text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 leading-relaxed">
+                        <b>회사 도메인이 같으면 상호가 달라도 같은 회사로 합칩니다.</b> 개인 메일(gmail, naver 등)은 제외합니다. 그룹사·협회·학교처럼 여러 회사가 함께 쓰는 도메인은 구글 시트의
+                        <b>'회사 도메인 예외'</b> 탭 A열에 한 줄에 하나씩 적으면 합치지 않습니다(반영까지 최대 1분).
+                    </div>
+                    <div><div class="font-semibold text-slate-700 mb-1.5">합쳐서 1개 회사로 센 상호</div><ul class="space-y-2">${mergedHtml}</ul></div>
                     <div><div class="font-semibold text-slate-700 mb-1.5">이름은 비슷하지만 회사 이메일 도메인이 달라 합치지 않음 (직접 확인)</div><ul class="space-y-1.5">${suspectHtml}</ul></div>
+                    ${sharedHtml}
                 </div></details>`;
         }
 
